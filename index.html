@@ -382,11 +382,23 @@
   #report .card .c { direction: ltr; font-family: Arial; }
   #report .card .o { direction: ltr; font-family: Arial; color: #e65100; }
   #report .km-tbl th { font-size: 11.5px; }
+  #report .hull-tbl td { text-align: center; }
   #report .km-tbl td { text-align: center; }
   #report .km-tbl .km-tot td { background: #e8eaf6; }
   #report .sv-ded-res { background: #f5f3fb; border: 1px solid #d1c4e9; border-radius: 6px; padding: 8px; font-size: 12.5px; }
   #report .sv-dedtbl td { font-size: 12.5px; padding: 5px 6px; }
   #report .sv-fixed-warn { font-size: 12px; }
+  #multiBtn { background: #2e7d32; color: #fff; }
+  #hullCard { margin: 0 16px 10px; background: #fff; border: 2px solid #2e7d32; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; }
+  #hullCard[hidden] { display: none; }
+  .hull-head { display: flex; justify-content: space-between; align-items: center; color: #1b5e20; font-size: 15px; margin-bottom: 6px; }
+  #hullInfo table { width: 100%; border-collapse: collapse; margin-top: 6px; font-size: 12.5px; }
+  #hullInfo th, #hullInfo td { border: 1px solid #c8e6c9; padding: 5px; text-align: center; }
+  #hullInfo th { background: #2e7d32; color: #fff; }
+  #hullInfo .ll { direction: ltr; font-family: Arial; }
+  .hull-sum { background: #e8f5e9; border-radius: 8px; padding: 8px; line-height: 1.8; }
+  .hull-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .hull-btns button { flex: 1 1 140px; background: #e8f5e9; color: #1b5e20; font-size: 13px; }
 </style>
 </head>
 <body>
@@ -408,6 +420,18 @@
   <button id="fieldBtn" hidden>🗺️ محيط ميداني</button>
   <button id="northBtn" hidden>🧭 إعادة توجيه الخريطة للشمال</button>
   <button id="svBtn">🧹 مسح النظافة</button>
+  <button id="multiBtn">🗂️ إدراج صور متعددة وتحديد حدودها</button>
+</div>
+
+<!-- حدود الصور المُدرجة (المضلع الخارجي الذي يحيط بكل الصور) -->
+<div id="hullCard" hidden>
+  <div class="hull-head"><b>📐 حدود الصور</b><button type="button" id="hullClose" class="cc-x" aria-label="إخفاء">✖</button></div>
+  <div id="hullInfo"></div>
+  <div class="hull-btns">
+    <button type="button" id="hullFit">🔍 عرض الحدود على الخريطة</button>
+    <button type="button" id="hullCopy">📋 نسخ إحداثيات الحدود</button>
+    <button type="button" id="hullUse">🧹 اعتمادها كحدود الحي</button>
+  </div>
 </div>
 
 <div class="options">
@@ -421,6 +445,7 @@
 
 <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
 <input type="file" id="galleryInput" accept="image/*" multiple style="display:none">
+<input type="file" id="multiInput" accept="image/*" multiple style="display:none">
 
 <!-- الكاميرا داخل الصفحة -->
 <div id="camModal">
@@ -2827,6 +2852,8 @@
         // 2) الموقع المحفوظ داخل الصورة
         await addPoint(img, { latitude: it.ex.lat, longitude: it.ex.lng, accuracy: it.ex.acc }, { time, src: 'exif', noPick: batch });
         fromPhoto++;
+      } else if (multiBounds) {
+        failed++;   // إدراج الصور المتعددة: الصورة بلا إحداثيات لا تُضاف (لا نستخدم موقعك الحالي)
       } else if (await getHereOnce()) {
         // 3) موقعك الحالي
         await addPoint(img, here, { time, src: 'gps', noPick: batch });
@@ -2838,14 +2865,90 @@
     if (fromText) parts.push(`${fromText} من الإحداثيات المكتوبة على الصورة 📝`);
     if (fromPhoto) parts.push(`${fromPhoto} من موقع التصوير داخل الصورة 📷`);
     if (fromHere) parts.push(`${fromHere} من موقعك الحالي (الصورة بلا موقع)`);
-    if (failed) parts.push(`${failed} لم تُضف لتعذّر تحديد الموقع`);
+    if (failed) parts.push(multiBounds ? `${failed} لم تُضف لعدم وجود إحداثيات فيها` : `${failed} لم تُضف لتعذّر تحديد الموقع`);
     if (ocrDown) parts.push('تعذّر تشغيل قارئ النص — تأكد من الإنترنت');
     if (fixedList.length) parts.push(`🔧 صُحّحت قراءة: ${fixedList.join(' ، ')}`);
     if (suspicious.length) parts.push(`⚠️ تجاهلت قراءة غير منطقية (${suspicious.join(' ، ')}) — تبعد أكثر من ${OCR_MAX_KM} كم؛ صحّحها من «✏️ تعديل»`);
     statusEl.textContent = (batch ? `تمت إضافة الصور: ` : 'تمت الإضافة: ') + parts.join(' — ') +
       (batch && autoPick.checked ? ' — حدّد الإحداثيات الثانية من الجدول.' : '');
     flyToPhotos(points.slice(firstNew));   // الخريطة تنتقل إلى مواقع الصور المرفقة
+    if (multiBounds) { multiBounds = false; hullShow(true); }
   }
+  // ===== إدراج صور متعددة واستخراج إحداثياتها ثم رسم حدودها (اختياري — لا يغيّر الإدراج العادي) =====
+  let multiBounds = false;
+  document.getElementById('multiBtn').onclick = () => document.getElementById('multiInput').click();
+  document.getElementById('multiInput').onchange = e => { multiBounds = true; autoPick.dataset.prev = autoPick.checked; fromFileInput(e).finally(() => { multiBounds = false; }); };
+
+  // صور الحدود: كل صورة إحداثياتها مأخوذة من الصورة نفسها (نص مكتوب أو موقع داخلي) أو معدّلة يدوياً
+  const hullPhotos = () => points.filter(p => ['exif', 'ocr', 'ocrfix', 'edit'].includes(p.src) && isFinite(p.lat) && isFinite(p.lng));
+  // المضلع الخارجي (Convex Hull — Monotone Chain) بإسقاط محلي بالمتر
+  function convexHull(list) {
+    const u = []; const seen = new Set();
+    list.forEach(p => { const k = p.lat.toFixed(7) + ',' + p.lng.toFixed(7); if (!seen.has(k)) { seen.add(k); u.push(p); } });
+    if (u.length < 3) return u.slice();
+    const k = Math.PI / 180, lat0 = u.reduce((a, p) => a + p.lat, 0) / u.length, c0 = Math.cos(lat0 * k), R0 = 6371008.8;
+    const P = u.map(p => ({ p, x: p.lng * k * R0 * c0, y: p.lat * k * R0 })).sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lo = [], up = [];
+    for (const q of P) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], q) <= 0) lo.pop(); lo.push(q); }
+    for (let i = P.length - 1; i >= 0; i--) { const q = P[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], q) <= 0) up.pop(); up.push(q); }
+    up.pop(); lo.pop();
+    return lo.concat(up).map(o => o.p);
+  }
+  function hullArea(h) {
+    if (h.length < 3) return 0;
+    if (window.turf && turf.area) { try { const r = h.map(p => [p.lng, p.lat]); r.push(r[0]); return turf.area(turf.polygon([r])); } catch (e) {} }
+    const k = Math.PI / 180, lat0 = h.reduce((a, p) => a + p.lat, 0) / h.length, c0 = Math.cos(lat0 * k), R0 = 6371008.8;
+    const xy = h.map(p => [p.lng * k * R0 * c0, p.lat * k * R0]);
+    let a = 0; for (let i = 0; i < xy.length; i++) { const [x1, y1] = xy[i], [x2, y2] = xy[(i + 1) % xy.length]; a += x1 * y2 - x2 * y1; }
+    return Math.abs(a) / 2;
+  }
+  function hullCalc() {
+    const ps = hullPhotos(), h = convexHull(ps);
+    let per = 0; for (let i = 0; i < h.length; i++) { if (h.length < 2) break; if (i === h.length - 1 && h.length < 3) break; per += distM(h[i], h[(i + 1) % h.length]); }
+    const ext = ps.length ? {
+      n: ps.reduce((a, p) => p.lat > a.lat ? p : a), s: ps.reduce((a, p) => p.lat < a.lat ? p : a),
+      e: ps.reduce((a, p) => p.lng > a.lng ? p : a), w: ps.reduce((a, p) => p.lng < a.lng ? p : a) } : null;
+    return { ps, h, per, area: hullArea(h), ext };
+  }
+  const hullLayer = L.polygon([], { color: '#00e676', weight: 4, fillColor: '#00e676', fillOpacity: 0.12, interactive: false }).addTo(map);
+  let hullOn = getSetting('pm_hull', '0') === '1';
+  function hullRender() {
+    const card = document.getElementById('hullCard');
+    if (!hullOn) { hullLayer.setLatLngs([]); card.hidden = true; return; }
+    const r = hullCalc();
+    hullLayer.setLatLngs(r.h.length >= 3 ? r.h.map(p => [p.lat, p.lng]) : []);
+    card.hidden = false;
+    const cell = p => `<td><b>${p.name}</b></td><td class="ll">${ll(p)}</td>`;
+    document.getElementById('hullInfo').innerHTML = !r.ps.length
+      ? '<div class="hull-sum">لا توجد صور فيها إحداثيات بعد — اضغط «🗂️ إدراج صور متعددة».</div>'
+      : `<div class="hull-sum">عدد الصور ذات الإحداثيات: <b>${r.ps.length}</b> — رؤوس الحدود: <b>${r.h.length}</b> صورة<br>
+          ${r.h.length >= 3 ? `محيط الحدود: <b>${fmtNice(r.per)}</b> — المساحة داخل الحدود: <b>${Math.round(r.area).toLocaleString('en')} م²</b>${r.area >= 10000 ? ` (${fmt2(r.area / 10000)} هكتار)` : ''}` : 'تحتاج 3 صور على الأقل في مواقع مختلفة لرسم الحدود.'}</div>
+        <table><thead><tr><th>الحد</th><th>الصورة</th><th>الإحداثيات</th></tr></thead><tbody>
+          <tr><td>⬆️ الشمال</td>${cell(r.ext.n)}</tr><tr><td>⬇️ الجنوب</td>${cell(r.ext.s)}</tr>
+          <tr><td>➡️ الشرق</td>${cell(r.ext.e)}</tr><tr><td>⬅️ الغرب</td>${cell(r.ext.w)}</tr></tbody></table>
+        ${r.h.length >= 3 ? `<table><thead><tr><th>#</th><th>رأس الحدود</th><th>الإحداثيات</th></tr></thead><tbody>${r.h.map((p, i) => `<tr><td>${i + 1}</td>${cell(p)}</tr>`).join('')}</tbody></table>` : ''}`;
+  }
+  function hullShow(fit) {
+    hullOn = true; setSetting('pm_hull', '1'); hullRender();
+    const r = hullCalc();
+    if (fit && r.ps.length) map.fitBounds(L.latLngBounds(r.ps.map(p => [p.lat, p.lng])).pad(0.2), { maxZoom: 18 });
+  }
+  document.getElementById('hullClose').onclick = () => { hullOn = false; setSetting('pm_hull', '0'); hullRender(); };
+  document.getElementById('hullFit').onclick = () => hullShow(true);
+  document.getElementById('hullCopy').onclick = async () => {
+    const r = hullCalc(); if (r.h.length < 3) { alert('لا توجد حدود بعد.'); return; }
+    const txt = r.h.map((p, i) => `${i + 1}) ${p.name}: ${ll(p)}`).join('\n');
+    try { await navigator.clipboard.writeText(txt); alert('تم نسخ إحداثيات الحدود.'); } catch (e) { prompt('انسخ الإحداثيات:', txt.replace(/\n/g, ' | ')); }
+  };
+  document.getElementById('hullUse').onclick = () => {
+    const r = hullCalc(); if (r.h.length < 3) { alert('تحتاج 3 صور على الأقل لرسم الحدود.'); return; }
+    if (sv.boundary.length && !confirm('سيتم استبدال حدود الحي الحالية بحدود الصور. متابعة؟')) return;
+    if (!svGuard('اعتماد حدود الصور كحدود الحي', `${sv.boundary.length} نقاط`, `${r.h.length} نقاط`)) return;
+    sv.boundary = r.h.map(p => ({ lat: p.lat, lng: p.lng })); svSave(); svRender();
+    alert('تم اعتماد حدود الصور كحدود الحي في «مسح النظافة».');
+  };
+
   cameraInput.onchange = fromFileInput;
   document.getElementById('galleryInput').onchange = fromFileInput;
 
@@ -3060,6 +3163,7 @@
   }
 
   function redraw(fit) {
+    if (typeof hullRender === 'function') setTimeout(() => { try { hullRender(); } catch (e) {} }, 0);
     const pc = photoCoords().map(c => [c.lat, c.lng]);
     if (isClosed() && pc.length >= 3) { shape.setLatLngs(pc); line.setLatLngs([]); }
     else { shape.setLatLngs([]); line.setLatLngs(pc); }
@@ -3355,6 +3459,16 @@
     drawPath(ctx, pp, closed);
     if (closed && pp.length >= 3) { ctx.fillStyle = 'rgba(59,59,255,.15)'; ctx.fill(); }
     ctx.setLineDash([]); ctx.strokeStyle = '#3b3bff'; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+
+    // حدود الصور المُدرجة (أخضر)
+    if (hullOn) {
+      const hh = hullCalc().h;
+      if (hh.length >= 3) {
+        drawPath(ctx, hh.map(toPx), true);
+        ctx.fillStyle = 'rgba(0,230,118,.15)'; ctx.fill();
+        ctx.strokeStyle = '#00e676'; ctx.lineWidth = 6; ctx.stroke();
+      }
+    }
 
     // الشكل البرتقالي (المحدد)
     if (pickedCount()) {
