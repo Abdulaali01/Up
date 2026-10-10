@@ -139,6 +139,7 @@
   .sv-quick { display: grid; grid-template-columns: 1fr 1fr; }
   .sv-quick button { padding: 12px 8px; font-size: 14px; }
   #svTrackGo { background: #1565c0; color: #fff; }
+  .sv-quick .sv-reset { grid-column: 1 / -1; background: #fdecea; color: #b00020; }
   #svTrackGo:disabled { opacity: .55; }
   .sv-main #svNewRound { background: #455a64; }
   .sv-ded { margin-top: 6px; }
@@ -503,6 +504,7 @@
     <button type="button" id="svTrackStop">⏸ إيقاف مؤقت</button>
     <button type="button" id="svLocate">📍 موقعي الآن</button>
     <button type="button" id="svAttach">🖼️ إرفاق صور بإحداثياتها</button>
+    <button type="button" id="svResetStart" class="sv-reset">🗑 مسح نقطة البداية والمسار المحفوظ</button>
   </div>
   <div id="svTrackInfo" class="sv-note"></div>
   <div id="svApprovedTag" class="sv-approved" hidden>🔒 الجولة معتمدة — أي تعديل يتطلب كتابة السبب ويُسجَّل في سجل التعديلات</div>
@@ -2261,7 +2263,29 @@
     svTrackUI(); svRender();
   };
   svEl('svTrackStop').onclick = () => { fsEl('fsPause').click(); svTrackUI(); };
+  // مسح نقطة البداية والمسار المحفوظ (المضلع الأخضر، علامتا البداية والنهاية، دائرة الإغلاق) — الصور لا تُمسح
+  function svResetStart() {
+    fsWatch(false);
+    Object.assign(fs, { pts: [], bad: [], dist: 0, rejected: 0, jumps: 0, alert90: false, leftStart: false, nearShown: false,
+      result: null, state: 'idle', lastAcc: null, lastHeading: NaN });
+    if (fsMe) { map.removeLayer(fsMe); fsMe = null; }
+    if (fsAccCircle) { map.removeLayer(fsAccCircle); fsAccCircle = null; }
+    fsRedrawPath(); fsSave(); fsUpdateUI();
+    if (watchId === null && track.length) { track = []; trackBad = []; rejected = 0; trackLine.setLatLngs([]); persistTrack(); updateTrackInfo(); }
+    arClearRoute();
+    svRender(); svTrackUI();
+  }
+  svEl('svResetStart').onclick = () => {
+    if (fs.state === 'tracking' && !confirm('التتبع يعمل الآن. إيقافه ومسح نقطة البداية والمسار؟')) return;
+    svResetStart();
+    statusEl.textContent = '🗑 تم مسح نقطة البداية والمسار المحفوظ — الصور باقية.';
+  };
   svEl('svLocate').onclick = async () => {
+    // موقعي الآن = بداية جديدة: تُمسح نقطة البداية القديمة والمسار المتوقف (لا يُمس التتبع إذا كان يعمل)
+    if (fs.state !== 'tracking' && (fs.pts.length || ar || (watchId === null && track.length))) {
+      svResetStart();
+      statusEl.textContent = '🗑 مُسحت نقطة البداية القديمة — ابدأ تتبع الجولة من موقعك الحالي.';
+    }
     svEl('svTrackInfo').textContent = 'جاري تحديد موقعك...';
     try {
       const c = await getHere();
