@@ -2005,11 +2005,7 @@
         <tr><td>مجموع نقاط الشدة</td><td>${r.sumPts} نقطة</td></tr>
         <tr><td>القطاعات المتدنية (نقاطها &gt; ${sv.deg})</td><td><b>${r.degN}</b> من ${r.nSeg}</td></tr>
       </table>
-      ${r.nSeg ? `<div class="sv-segs">${segBoxes}</div>
-      <div class="sv-note"><span class="sv-c0" style="display:inline-block;width:12px;height:12px;border-radius:3px"></span> نظيف
-        <span class="sv-c1" style="display:inline-block;width:12px;height:12px;border-radius:3px"></span> تدنٍ خفيف
-        <span class="sv-c2" style="display:inline-block;width:12px;height:12px;border-radius:3px"></span> تدنٍ متوسط
-        <span class="sv-c3" style="display:inline-block;width:12px;height:12px;border-radius:3px"></span> تدنٍ شديد</div>` : ''}
+      
       <div class="sv-big">
         <div class="prev"><small>نسبة انتشار تدني النظافة</small><b>${svPct(r.prev)}</b>
           <span class="eq">${r.nSeg ? `${r.degN} ÷ ${r.nSeg} × 100` : 'ابدأ تتبع الرحلة لحساب القطاعات'}</span></div>
