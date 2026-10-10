@@ -1,0 +1,3269 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>رفع النقاط بالصور</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Turf.js/6.5.0/turf.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: Tahoma, Arial, sans-serif; background: #f2f4f7; color: #1d2433; }
+  header { background: #1f4e79; color: #fff; padding: 12px 16px; font-size: 18px; font-weight: bold;
+    display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .bar { display: flex; gap: 8px; padding: 10px 16px; flex-wrap: wrap; }
+  button { border: 0; border-radius: 10px; padding: 12px 14px; font-size: 15px; font-weight: bold; cursor: pointer; font-family: inherit; }
+  #captureBtn { background: #2e7d32; color: #fff; flex: 2; min-width: 170px; }
+  #pdfBtn { background: #c62828; color: #fff; flex: 1; min-width: 120px; }
+  #undoBtn, #clearBtn { background: #e0e0e0; color: #333; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+
+  .options { display: flex; gap: 14px; padding: 0 16px 6px; flex-wrap: wrap; align-items: center; font-size: 13px; }
+  .seg { display: inline-flex; background: #e3e7ee; border-radius: 10px; padding: 3px; }
+  .seg button { background: transparent; color: #444; padding: 7px 12px; font-size: 13px; border-radius: 8px; }
+  .seg button.on { background: #fff; color: #1f4e79; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+  header .seg { background: rgba(255,255,255,.18); }
+  header .seg button { color: #fff; }
+  header .seg button.on { background: #fff; color: #1f4e79; }
+
+  #status { padding: 4px 16px; font-size: 13px; color: #555; min-height: 22px; }
+
+  /* ملخص المساحات */
+  #summary { display: none; margin: 4px 16px 8px; gap: 8px; flex-wrap: wrap; }
+  #summary.show { display: flex; }
+  .stat { background: #fff; border: 1px solid #d5dbe5; border-radius: 10px; padding: 8px 12px; flex: 1; min-width: 130px; }
+  .stat small { display: block; color: #667; font-size: 12px; }
+  .stat b { font-size: 16px; color: #1f4e79; }
+  .stat.pct b { color: #e65100; font-size: 20px; }
+  .stat.pct b.msg { font-size: 13px; color: #a33; }
+  .stat em { display: block; font-style: normal; font-size: 11px; color: #667; margin-top: 2px; }
+  .track-btn { background: #00897b; color: #fff; padding: 9px 14px; font-size: 14px; }
+  .track-btn.on { background: #c62828; }
+  .track-info { font-size: 12px; color: #455; }
+
+  /* ===== المحيط الميداني ===== */
+  #fieldBtn { background: #1565c0; color: #fff; }
+  #fieldCard { display: none; margin: 0 16px 10px; background: #fff; border: 2px solid #1565c0; border-radius: 12px; padding: 12px; direction: rtl; }
+  #fieldCard.open { display: block; }
+  #fieldCard .cc-head { color: #0d47a1; }
+  #fieldCard .cc-row input { border-color: #90caf9; }
+  .fs-note { font-size: 12.5px; color: #555; line-height: 1.6; margin-bottom: 8px; }
+  .fs-type { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; font-size: 14px; font-weight: bold; }
+  .fs-type .seg button { font-size: 15px; padding: 9px 16px; }
+  .fs-set { display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; margin-bottom: 10px; }
+  .fs-set input { width: 70px; font-size: 16px; padding: 6px; border: 1px solid #ccd; border-radius: 8px; text-align: center; }
+  .fs-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .fs-btns button { background: #e8eef7; color: #0d47a1; padding: 12px 8px; font-size: 14px; }
+  .fs-btns .fs-go { background: #1565c0; color: #fff; }
+  .fs-btns .fs-lock { background: #2e7d32; color: #fff; }
+  .fs-btns .fs-danger { background: #fdecea; color: #b00020; }
+  .fs-btns .fs-pdf { background: #c62828; color: #fff; }
+  #fsStateTag { margin: 10px 0 6px; font-size: 13px; font-weight: bold; padding: 6px 10px; border-radius: 8px; background: #eceff1; color: #37474f; }
+  #fsStateTag.tracking { background: #e3f2fd; color: #0d47a1; }
+  #fsStateTag.paused { background: #fff8e1; color: #8a5a00; }
+  #fsStateTag.closed { background: #e8f5e9; color: #1b5e20; }
+  .fs-live { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .fs-live div { background: #f5f8fc; border: 1px solid #dde6f1; border-radius: 8px; padding: 6px; text-align: center; }
+  .fs-live small { display: block; font-size: 11px; color: #667; }
+  .fs-live b { font-size: 15px; color: #0d47a1; }
+  .fs-bar { height: 10px; background: #e3e8ef; border-radius: 6px; overflow: hidden; margin: 8px 0 4px; }
+  #fsBarFill { height: 100%; width: 0; background: #1565c0; transition: width .4s; }
+  #fsBarFill.near { background: #ef6c00; }
+  #fsBarFill.done { background: #2e7d32; }
+  #fsInfo { font-size: 12px; color: #556; line-height: 1.6; }
+  #fsResult { display: none; margin-top: 10px; border: 2px solid #2e7d32; border-radius: 12px; padding: 10px; background: #f6fbf6; }
+  #fsResult.show { display: block; }
+  #fsResult .big { text-align: center; margin: 4px 0 8px; }
+  #fsResult .big small { display: block; color: #1b5e20; font-weight: bold; font-size: 14px; }
+  #fsResult .big b { font-size: 30px; color: #1b5e20; }
+  #fsResult table { font-size: 13px; }
+  #fsResult td { text-align: right; }
+  #fsToast { position: fixed; left: 12px; right: 12px; top: 12px; z-index: 4500; background: #ef6c00; color: #fff; font-weight: bold;
+    padding: 12px 14px; border-radius: 12px; box-shadow: 0 3px 12px rgba(0,0,0,.35); display: none; direction: rtl; font-size: 15px; line-height: 1.6; }
+  #fsToast.show { display: block; }
+  #fsNear { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4600; background: #fff; border-top: 4px solid #2e7d32; padding: 14px 16px 22px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,.3); display: none; direction: rtl; }
+  #fsNear.show { display: block; }
+  .fs-near-msg { font-weight: bold; font-size: 16px; margin-bottom: 10px; color: #1b5e20; }
+  .fs-near-btns { display: flex; gap: 8px; }
+  .fs-near-btns button { flex: 1; padding: 14px; font-size: 16px; }
+  #fsNearClose { background: #2e7d32; color: #fff; }
+  #fsNearLater { background: #eee; color: #333; }
+  #northBtn { background: #37474f; color: #fff; }
+  .north-badge { background: #fff; color: #b71c1c; width: 34px; height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    font: 800 15px/1.05 Arial, sans-serif; cursor: pointer; direction: ltr; user-select: none; }
+  .north-badge span:last-child { color: #111; font-size: 17px; }
+  .fs-me-wrap { position: relative; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; }
+  .fs-dir { position: absolute; inset: 0; pointer-events: none; }
+  .fs-me { width: 38px; height: 38px; border-radius: 50%; background: #1565c0; border: 3px solid #fff; box-shadow: 0 1px 6px rgba(0,0,0,.5);
+    display: flex; align-items: center; justify-content: center; font-size: 22px; }
+  .fs-start { background: #fff; border: 3px solid #000; border-radius: 8px; font-size: 12px; font-weight: bold; padding: 2px 4px; white-space: nowrap;
+    box-shadow: 0 1px 5px rgba(0,0,0,.4); text-align: center; }
+
+  /* ===== عناصر محذوفة من الواجهة (حسب طلب المستخدم) — تبقى نسبة النظافة أعلى الصفحة ===== */
+  [hidden], #summary, #summary.show, #arCard, #arCard.show, #arResult, #arResult.show, #calcBox, #expLabel, #circleCard, #circleCard.open,
+  #fieldCard, #fieldCard.open, #fsNear, #fsNear.show, #arConfirm, #arConfirm.show, #modeBox { display: none !important; }
+  body.has-ar { padding-bottom: 0; }
+  #svTop { margin: 0 16px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #svTop div { border-radius: 10px; padding: 8px 10px; text-align: center; }
+  #svTop small { display: block; font-size: 12px; font-weight: bold; }
+  #svTop b { font-size: 22px; }
+  #svTop em { display: block; font-style: normal; font-size: 11.5px; margin-top: 2px; }
+  #svTop .prev { background: #ffebee; color: #b71c1c; }
+  #svTop .sevi { background: #fff3e0; color: #e65100; }
+
+  /* ===== مسح النظافة ===== */
+  #svBtn { background: #00695c; color: #fff; }
+  #svCard { margin: 0 16px 10px; background: #fff; border: 2px solid #00695c; border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; font-size: 14px; }
+  #svCard[hidden] { display: none; }
+  .sv-head { display: flex; justify-content: space-between; align-items: center; color: #004d40; font-size: 16px; gap: 8px; }
+  .sv-switch { display: flex; align-items: center; gap: 8px; font-weight: bold; background: #e0f2f1; padding: 8px 10px; border-radius: 8px; line-height: 1.5; }
+  .sv-switch input { width: 22px; height: 22px; flex: 0 0 auto; }
+  .sv-approved { background: #fff3e0; color: #8a4b00; font-weight: bold; padding: 8px 10px; border-radius: 8px; }
+  .sv-approved[hidden] { display: none; }
+  .sv-sec { border: 1px solid #cfd8dc; border-radius: 10px; padding: 8px 10px; }
+  .sv-sec summary { font-weight: bold; color: #004d40; cursor: pointer; padding: 4px 0; }
+  .sv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; }
+  .sv-grid label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: #37474f; min-width: 0; }
+  .sv-grid .sv-wide { grid-column: 1 / -1; }
+  .sv-grid input, .sv-grid select, #svObsSheet select, #svObsSheet textarea { font: inherit; font-size: 15px; padding: 8px; border: 1px solid #b0bec5; border-radius: 8px; background: #fff; min-width: 0; width: 100%; box-sizing: border-box; }
+  .sv-row { display: flex; gap: 6px; }
+  .sv-now { background: #eceff1; color: #263238; padding: 6px 10px; font-size: 12px; flex: 0 0 auto; }
+  .sv-note { font-size: 12.5px; color: #546e7a; line-height: 1.7; margin-top: 6px; }
+  .sv-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .sv-btns button { background: #e0f2f1; color: #004d40; padding: 10px 12px; font-size: 13.5px; }
+  .sv-main button { flex: 1; background: #00695c; color: #fff; }
+  .sv-quick { display: grid; grid-template-columns: 1fr 1fr; }
+  .sv-quick button { padding: 12px 8px; font-size: 14px; }
+  #svTrackGo { background: #1565c0; color: #fff; }
+  #svTrackGo:disabled { opacity: .55; }
+  .sv-main #svNewRound { background: #455a64; }
+  .sv-ded { margin-top: 6px; }
+  .sv-ded input { width: 100%; box-sizing: border-box; font-size: 15px; padding: 6px; border: 1px solid #b0bec5; border-radius: 6px; text-align: center; }
+  #svResult .sv-big { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 8px 0; }
+  #svResult .sv-big div { border-radius: 10px; padding: 10px; text-align: center; }
+  #svResult .sv-big small { display: block; font-weight: bold; font-size: 12.5px; }
+  #svResult .sv-big b { font-size: 26px; }
+  #svResult .sv-big .prev { background: #ffebee; color: #b71c1c; }
+  #svResult .sv-big .sevi { background: #fff3e0; color: #e65100; }
+  #svResult .sv-big .eq { display: block; font-size: 12px; margin-top: 2px; font-weight: normal; }
+  #svResult h4, #svObsList h4, #svRounds h4, #svLog h4 { margin: 12px 0 6px; color: #004d40; font-size: 15px; }
+  #svResult td, #svObsList td, #svRounds td, #svLog td { text-align: right; font-size: 13px; }
+  .sv-tbl-wrap { overflow-x: auto; }
+  .sv-segs { display: flex; flex-wrap: wrap; gap: 3px; margin: 6px 0; }
+  .sv-segs span { width: 22px; height: 22px; border-radius: 4px; font-size: 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-family: Arial; }
+  .sv-c0 { background: #2e7d32; } .sv-c1 { background: #f9a825; } .sv-c2 { background: #ef6c00; } .sv-c3 { background: #c62828; }
+  .sv-warn { background: #fff8e1; color: #6d4c00; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.7; margin-top: 8px; }
+  .sv-ded-res { background: #ede7f6; color: #311b92; border-radius: 8px; padding: 8px 10px; margin-top: 8px; line-height: 1.8; }
+  #svObsList select, #svObsList input { font-size: 13px; padding: 4px; border: 1px solid #b0bec5; border-radius: 6px; max-width: 150px; }
+  #svObsList img { width: 48px; height: 36px; object-fit: cover; border-radius: 4px; }
+  .sv-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4800; background: #fff; border-top: 4px solid #00695c; padding: 12px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+    box-shadow: 0 -4px 16px rgba(0,0,0,.3); display: flex; flex-direction: column; gap: 8px; max-height: 85vh; overflow-y: auto; direction: rtl; }
+  .sv-sheet[hidden] { display: none; }
+  .sv-sheet-title { font-weight: bold; font-size: 16px; color: #004d40; }
+  .sv-sheet label { display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+  #svObsImg { max-height: 120px; object-fit: contain; border-radius: 8px; background: #eceff1; }
+  .sv-sev { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .sv-sev label { flex-direction: row; align-items: center; gap: 6px; background: #f5f7f8; border-radius: 8px; padding: 8px; }
+  .sv-sev input { width: 20px; height: 20px; }
+  .sv-sheet-btns { display: flex; gap: 8px; }
+  .sv-sheet-btns button { flex: 1; padding: 14px; font-size: 15px; }
+  #svObsSave, #svDupMerge { background: #00695c; color: #fff; }
+  #svObsSkip, #svDupSeparate { background: #eceff1; color: #263238; }
+  .exp-label { margin: 0 16px 6px; font-size: 13px; font-weight: bold; color: #6a1b9a; background: #f3e5f5; border-radius: 8px; padding: 8px 10px; }
+  .exp-label[hidden] { display: none; }
+  body.sv-drawing #map { outline: 3px dashed #ef6c00; cursor: crosshair; }
+
+  /* ===== بطاقة «أنت قطعت» ونتيجة المساحات ===== */
+  #arCard { position: fixed; left: 12px; right: 12px; bottom: 14px; z-index: 4000; display: none; background: #1b5e20; color: #fff;
+    border-radius: 14px; padding: 14px 12px; font-size: 15.5px; font-weight: bold; box-shadow: 0 4px 14px rgba(0,0,0,.35); text-align: center; line-height: 1.5; }
+  #arCard b { font-size: 18px; color: #ffeb3b; }
+  #arCard.show { display: block; }
+  #arCard:active { transform: scale(.98); }
+  #fsNear.show ~ #arCard, #arConfirm.show ~ #arCard { display: none; }
+  body.has-ar { padding-bottom: 92px; }
+  #arConfirm { position: fixed; left: 0; right: 0; bottom: 0; z-index: 4700; background: #fff; border-top: 4px solid #d50000; padding: 14px 16px 22px;
+    box-shadow: 0 -4px 16px rgba(0,0,0,.3); display: none; direction: rtl; }
+  #arConfirm.show { display: block; }
+  #arConfirm .fs-near-msg { color: #8e0000; }
+  .ar-gap { font-size: 14px; margin-bottom: 10px; color: #444; }
+  #arYes { background: #2e7d32; color: #fff; }
+  #arNo { background: #eee; color: #333; }
+  #arResult { display: none; margin: 0 16px 10px; background: #fff; border: 2px solid #2e7d32; border-radius: 12px; padding: 12px; direction: rtl; }
+  #arResult.show { display: block; }
+  #arResult h3 { margin: 0 0 8px; color: #1b5e20; font-size: 16px; display: flex; justify-content: space-between; align-items: center; }
+  #arResult h3 button { background: #eee; color: #333; padding: 6px 10px; font-size: 12px; }
+  #arResult table td { text-align: right; font-size: 13.5px; }
+  #arResult table td:last-child { font-weight: bold; color: #0d3c61; }
+  #arResult .ar-big { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+  #arResult .ar-big div { border-radius: 10px; padding: 8px; text-align: center; }
+  #arResult .ar-big small { display: block; font-size: 12px; font-weight: bold; }
+  #arResult .ar-big b { font-size: 22px; }
+  #arResult .ar-big .area { background: #e8f5e9; color: #1b5e20; }
+  #arResult .ar-big .dist { background: #fff3e0; color: #e65100; }
+  #arResult .ar-big b.msg { font-size: 13px; color: #b00020; }
+  #arResult .ar-note { font-size: 11.5px; color: #667; margin-top: 8px; line-height: 1.6; }
+  .ar-chk { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; color: #1565c0; margin-top: 3px; white-space: nowrap; }
+  .ar-chk input { width: 16px; height: 16px; }
+  #calcBox { margin: 0 16px 8px; background: #fff; border: 2px solid #455a64; border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+  #calcBox[hidden] { display: none; }
+  #calcBox .calc-title { color: #263238; font-size: 15px; }
+  #calcBox label { display: flex; align-items: center; gap: 8px; line-height: 1.5; }
+  #calcBox input[type=radio] { width: 20px; height: 20px; flex: 0 0 auto; }
+  .calc-opts { display: flex; align-items: center; gap: 8px; }
+  .calc-opts[hidden] { display: none; }
+  #gpsTol { width: 80px; font-size: 16px; padding: 6px; border: 1px solid #b0bec5; border-radius: 8px; text-align: center; }
+  #dotsBtn { background: #eceff1; color: #263238; padding: 10px; font-size: 14px; }
+  .calc-legend { font-size: 12px; color: #555; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+  .calc-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-inline-start: 8px; }
+  #arResult .ar-big .pts { background: #eef3f0; color: #1b5e20; }
+  .ar-warn { margin-top: 8px; font-size: 12.5px; background: #fff8e1; color: #6d4c00; border-radius: 8px; padding: 8px 10px; line-height: 1.7; }
+  .ar-trip { background: #e3f2fd; color: #0d47a1; font-weight: bold; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 14.5px; line-height: 1.6; }
+  .ar-close-opt { display: flex; align-items: center; gap: 8px; font-size: 13.5px; line-height: 1.5; }
+  .ar-close-opt input { width: 20px; height: 20px; flex: 0 0 auto; }
+  .ar-end { background: #000; color: #fff; border: 2px solid #fff; border-radius: 8px; font-size: 12px; font-weight: bold; padding: 2px 4px; white-space: nowrap;
+    box-shadow: 0 1px 5px rgba(0,0,0,.4); text-align: center; }
+
+  /* ===== طريقة الحساب ===== */
+  #modeBox { margin: 4px 16px 8px; background: #fff; border: 1px solid #d5dbe5; border-radius: 12px; padding: 10px 12px; direction: rtl; }
+  #modeBox .cc-row { margin-bottom: 4px; }
+  #modeBox input { flex: 1; min-width: 0; font-size: 18px; padding: 10px 12px; border: 1px solid #b9a5c9; border-radius: 10px; font-family: inherit; }
+  .mode-hint { font-size: 13px; color: #555; line-height: 1.6; }
+  #modeTag { margin-top: 6px; font-size: 13px; font-weight: bold; padding: 6px 10px; border-radius: 8px; }
+  #modeTag.walk { background: #e0f2f1; color: #00695c; }
+  #modeTag.perim { background: #f3e5f5; color: #6a1b9a; }
+  #perimResult { display: none; margin-top: 8px; font-size: 15px; line-height: 1.9; }
+  #perimResult.show { display: block; }
+  #perimResult b { color: #6a1b9a; font-size: 17px; }
+  #perimResult small { display: block; color: #8a5a00; background: #fff8e1; border-radius: 8px; padding: 6px 8px; margin-top: 4px; line-height: 1.6; }
+  .track-btn:disabled { background: #9e9e9e; }
+
+  /* ===== لوحة المحيط ===== */
+  #circleBtn { background: #6a1b9a; color: #fff; }
+  #circleCard { display: none; margin: 0 16px 10px; background: #fff; border: 2px solid #8e24aa; border-radius: 12px; padding: 12px; direction: rtl; }
+  #circleCard.open { display: block; }
+  .cc-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: #6a1b9a; font-size: 16px; }
+  .cc-x { background: #eee; color: #333; padding: 6px 10px; font-size: 14px; }
+  .cc-title { display: block; font-weight: bold; font-size: 15px; margin-bottom: 6px; }
+  .cc-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .cc-row input, .cc-row select { flex: 1; min-width: 0; font-size: 18px; padding: 10px 12px; border: 1px solid #b9a5c9; border-radius: 10px; font-family: inherit; background: #fff; }
+  .cc-row select { font-size: 15px; }
+  .cc-unit, .cc-lbl { font-weight: bold; color: #444; white-space: nowrap; }
+  .cc-opts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; font-size: 15px; }
+  .cc-opts label { display: flex; align-items: center; gap: 8px; }
+  .cc-opts input { width: 20px; height: 20px; }
+  .cc-btns { display: flex; gap: 8px; }
+  #ccShow { flex: 2; background: #8e24aa; color: #fff; }
+  #ccClear { flex: 1; background: #eee; color: #a00; }
+  #ccResult { margin-top: 8px; font-size: 14px; line-height: 1.8; }
+  #ccResult.err { color: #b00020; font-weight: bold; }
+  .circle-info { position: absolute; z-index: 800; bottom: 10px; right: 10px; background: rgba(255,255,255,.95); border: 2px solid #8e24aa;
+    border-radius: 10px; padding: 6px 10px; font-size: 12px; line-height: 1.7; direction: rtl; pointer-events: none; max-width: 75%; box-shadow: 0 1px 6px rgba(0,0,0,.3); }
+  .circle-info b { color: #6a1b9a; }
+  .m-stem { width: 0; height: 0; margin: -2px auto 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 22px solid #8e24aa; }
+  .m-icon { background: #8e24aa; color: #fff; border: 3px solid #fff; border-radius: 50%; width: 36px; height: 36px; line-height: 30px;
+    text-align: center; font-weight: bold; font-size: 17px; font-family: Arial; box-shadow: 0 1px 6px rgba(0,0,0,.5); }
+
+  /* ===== الكاميرا داخل الصفحة ===== */
+  #camModal { display: none; position: fixed; inset: 0; z-index: 5000; background: #000; color: #fff; flex-direction: column; }
+  #camModal.open { display: flex; }
+  .cam-top { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; gap: 10px; }
+  .cam-top span { font-weight: bold; font-size: 15px; }
+  .cam-ic { background: rgba(255,255,255,.15); color: #fff; width: 44px; height: 44px; padding: 0; border-radius: 50%; font-size: 18px; }
+  .cam-list { display: flex; gap: 6px; overflow-x: auto; padding: 0 12px 8px; scrollbar-width: none; }
+  .cam-list::-webkit-scrollbar { display: none; }
+  .cam-list button { flex: 0 0 auto; background: rgba(255,255,255,.14); color: #fff; padding: 8px 12px; font-size: 13px; border-radius: 20px; white-space: nowrap; }
+  .cam-list button.on { background: #ffd54f; color: #000; }
+  .cam-view { flex: 1; position: relative; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+  #camVideo, #camShot { width: 100%; height: 100%; object-fit: contain; background: #000; }
+  #camShot { display: none; position: absolute; inset: 0; }
+  #camModal.review #camShot { display: block; }
+  #camModal.review #camVideo { visibility: hidden; }
+  #camMsg { position: absolute; inset: auto 16px 16px; text-align: center; font-size: 14px; background: rgba(0,0,0,.6); border-radius: 10px; padding: 8px; display: none; }
+  #camMsg.show { display: block; }
+  .cam-bar { display: flex; align-items: center; justify-content: space-around; padding: 16px 12px 26px; gap: 12px; }
+  #camReview { display: none; }
+  #camModal.review #camReview { display: flex; }
+  #camModal.review #camLive { display: none; }
+  #camShutter { width: 74px; height: 74px; border-radius: 50%; background: #fff; border: 6px solid rgba(255,255,255,.4); background-clip: padding-box; padding: 0; }
+  #camShutter:active { transform: scale(.93); }
+  .cam-side { width: 64px; background: transparent; color: #fff; font-size: 12px; padding: 4px; line-height: 1.5; }
+  .cam-act { flex: 1; padding: 14px; font-size: 16px; }
+  .cam-act.retake { background: #424242; color: #fff; }
+  .cam-act.use { background: #2e7d32; color: #fff; }
+
+  /* شريط التحديد على الخريطة */
+  #pickBar { display: none; margin: 0 16px 8px; background: #fff3e0; border: 2px solid #ef6c00; color: #8a3b00;
+    border-radius: 10px; padding: 10px 12px; font-weight: bold; font-size: 14px; align-items: center; gap: 10px; justify-content: space-between; }
+  #pickBar.show { display: flex; }
+  #pickBar button { background: #ef6c00; color: #fff; padding: 8px 14px; font-size: 13px; }
+  body.picking #map { cursor: crosshair; outline: 3px solid #ef6c00; }
+
+  #map { border-radius: 12px; border: 1px solid #ccd; height: 60vh; margin: 0 16px; }
+  body.mobile #map, body.web #map { margin: 0; }
+  table { width: 100%; border-collapse: collapse; background: #fff; font-size: 12.5px; }
+  th, td { border: 1px solid #ccd; padding: 6px 4px; text-align: center; }
+  th { background: #1f4e79; color: #fff; position: sticky; top: 0; z-index: 1; }
+  td img { width: 56px; height: 42px; object-fit: cover; border-radius: 4px; }
+  td .ll { direction: ltr; font-family: Arial; white-space: nowrap; font-size: 12px; }
+  td .pk { color: #e65100; }
+  td .mini { padding: 5px 8px; font-size: 12px; border-radius: 7px; margin: 2px; }
+  .btn-pick { background: #ef6c00; color: #fff; }
+  .btn-del { background: #eee; color: #a00; }
+  .dist { font-weight: bold; color: #e65100; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover { background: #eef3fa; }
+  tfoot td { background: #fff8f0; font-weight: bold; }
+
+  body.mobile .layout { padding: 0 16px 30px; }
+  body.mobile #map { height: 60vh; }
+  body.mobile .side { margin-top: 10px; overflow-x: auto; }
+
+  body.web .layout { display: grid; grid-template-columns: 1fr 560px; gap: 14px; padding: 0 16px 16px; height: calc(100vh - 230px); min-height: 450px; }
+  body.web #map { height: 100%; }
+  body.web .side { overflow: auto; border: 1px solid #ccd; border-radius: 12px; background: #fff; }
+
+  .letter-icon { background: #fff; color: #000; border: 3px solid #000; border-radius: 50%;
+    width: 34px; height: 34px; line-height: 28px; text-align: center; font-weight: bold; font-size: 15px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.5); font-family: Arial; }
+  .pick-icon { background: #ef6c00; color: #fff; border: 2px solid #fff; border-radius: 7px;
+    width: 34px; height: 26px; line-height: 22px; text-align: center; font-weight: bold; font-size: 13px;
+    box-shadow: 0 1px 5px rgba(0,0,0,.5); font-family: Arial; }
+  .dist-tip { background: #ef6c00; color: #fff; border: 0; font-weight: bold; font-family: Arial; padding: 2px 6px; }
+  .dist-tip::before { display: none; }
+  .popup-box { text-align: center; direction: rtl; font-family: Tahoma, Arial; }
+  .popup-box img { width: 180px; height: 135px; object-fit: cover; border-radius: 6px; display: block; margin-bottom: 6px; }
+  .popup-box button { margin-top: 6px; padding: 6px 10px; font-size: 12px; background: #ef6c00; color: #fff; }
+
+  html, body { overflow-x: hidden; max-width: 100%; }
+  /* التقرير مخفي ولا يُظهر إلا لحظة التصدير، ولا يوسّع الصفحة */
+  #report { display: none; position: fixed; top: 0; left: 0; z-index: -1; width: 794px; background: #fff; padding: 30px; direction: rtl; font-family: Tahoma, Arial; }
+  #report.on { display: block; }
+  #report h2 { text-align: center; color: #1f4e79; margin: 0 0 6px; }
+  #report .meta { text-align: center; font-size: 12px; color: #555; margin-bottom: 10px; }
+  #report .sumrow { display: flex; gap: 8px; margin-bottom: 10px; }
+  #report .sumrow div { flex: 1; border: 1px solid #ccd; border-radius: 6px; padding: 6px; text-align: center; font-size: 12px; }
+  #report .sumrow b { display: block; font-size: 15px; color: #1f4e79; }
+  #report .sumrow .p b { color: #e65100; }
+  #report table { width: 100%; margin: 0; font-size: 12px; }
+  #report th { position: static; }
+  #report .shape { text-align: center; margin: 6px 0 12px; }
+  #report .legend { font-size: 11px; color: #444; text-align: center; margin-top: 4px; }
+  #report .legend span { display: inline-block; width: 18px; height: 6px; vertical-align: middle; margin: 0 4px 0 10px; }
+  #report .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  #report .card { border: 1px solid #ccd; border-radius: 6px; padding: 5px; text-align: center; font-size: 10.5px; height: 196px; overflow: hidden; }
+  #report .card img { width: 100%; height: 118px; object-fit: cover; border-radius: 4px; display: block; }
+  #report .card b { font-size: 14px; color: #1f4e79; font-family: Arial; }
+  #report .card .c { direction: ltr; font-family: Arial; }
+  #report .card .o { direction: ltr; font-family: Arial; color: #e65100; }
+</style>
+</head>
+<body>
+
+<header>
+  <span>📍 رفع النقاط بالصور</span>
+  <span class="seg" id="viewSeg">
+    <button data-v="mobile">📱 جوال</button>
+    <button data-v="web">🖥️ ويب</button>
+  </span>
+</header>
+
+<div class="bar">
+  <button id="captureBtn">📷 التقاط صورة / نقطة</button>
+  <button id="pdfBtn" disabled>📄 تصدير PDF</button>
+  <button id="undoBtn" disabled>↶ تراجع</button>
+  <button id="clearBtn">مسح</button>
+  <button id="circleBtn" hidden>⭕ المحيط</button>
+  <button id="fieldBtn" hidden>🗺️ محيط ميداني</button>
+  <button id="northBtn" hidden>🧭 إعادة توجيه الخريطة للشمال</button>
+  <button id="svBtn">🧹 مسح النظافة</button>
+</div>
+
+<div class="options">
+  <span>نوع الرسم:</span>
+  <span class="seg" id="shapeSeg">
+    <button data-s="closed">⬠ شكل مغلق (أرض)</button>
+    <button data-s="open">〰 مسار مفتوح (طريق)</button>
+  </span>
+  <label><input type="checkbox" id="autoPick" checked> حدّد إحداثية ثانية بعد كل صورة</label>
+</div>
+
+<input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
+<input type="file" id="galleryInput" accept="image/*" multiple style="display:none">
+
+<!-- الكاميرا داخل الصفحة -->
+<div id="camModal">
+  <div class="cam-top">
+    <button id="camClose" class="cam-ic" aria-label="إغلاق">✖</button>
+    <span id="camTitle">التقاط صورة</span>
+    <button id="camSwitch" class="cam-ic" aria-label="الكاميرا التالية">🔄</button>
+  </div>
+  <div id="camList" class="cam-list"></div>
+  <div class="cam-view">
+    <video id="camVideo" autoplay playsinline muted></video>
+    <img id="camShot" alt="">
+    <div id="camMsg"></div>
+  </div>
+  <div class="cam-bar" id="camLive">
+    <button id="camGallery" class="cam-side">🖼️<br>المعرض</button>
+    <button id="camShutter" aria-label="التقاط"></button>
+    <button id="camApps" class="cam-side">📲<br>تطبيق كاميرا</button>
+  </div>
+  <div class="cam-bar" id="camReview">
+    <button id="camRetake" class="cam-act retake">↺ إعادة</button>
+    <button id="camUse" class="cam-act use">✔ استخدام الصورة</button>
+  </div>
+</div>
+
+<div id="svTop">
+  <div class="prev"><small>نسبة انتشار تدني النظافة</small><b id="svTopPrev">—</b><em id="svTopPrevEq"></em></div>
+  <div class="sevi"><small>مؤشر شدة التدني</small><b id="svTopSev">—</b><em id="svTopSevEq"></em></div>
+</div>
+
+<div id="status">اضغط "التقاط صورة" عند كل نقطة — النقاط تُحفظ تلقائياً.</div>
+
+<!-- ===== رسم محيط ميداني وحساب المساحة ===== -->
+<div id="fieldCard">
+  <div class="cc-head">
+    <b>🗺️ رسم محيط ميداني وحساب المساحة</b>
+    <button id="fsCloseCard" class="cc-x" aria-label="إغلاق">✖</button>
+  </div>
+  <label for="fsTarget" class="cc-title">طول المحيط المستهدف بالكيلومتر</label>
+  <div class="cc-row">
+    <input id="fsTarget" type="text" inputmode="decimal" autocomplete="off" placeholder="مثال: 0.5 أو 1 أو 2.5 أو 10">
+    <span class="cc-unit">كم</span>
+  </div>
+  <div class="fs-note">الرقم هو طول المسار المغلق الذي ستتحرك عليه. الشكل الحقيقي يُرسم من نقاط GPS أثناء حركتك، وتُحسب المساحة بعد عودتك لنقطة البداية وإغلاق الشكل.</div>
+  <div class="fs-type">
+    <span>نوع الحركة:</span>
+    <span class="seg" id="fsType">
+      <button data-t="walk">🚶 مشي</button>
+      <button data-t="car">🚗 سيارة</button>
+    </span>
+  </div>
+  <div class="fs-set">
+    <label>تجاهل نقاط دقتها أسوأ من <input id="fsAcc" type="number" inputmode="numeric" value="20" min="5" max="200"> م</label>
+    <label>مسافة الإغلاق من نقطة البداية <input id="fsCloseR" type="number" inputmode="numeric" value="20" min="5" max="500"> م</label>
+  </div>
+  <div class="fs-btns">
+    <button id="fsStart" class="fs-go">▶ بدء التتبع</button>
+    <button id="fsPause">⏸ إيقاف مؤقت</button>
+    <button id="fsResume">⏯ متابعة</button>
+    <button id="fsCloseShape" class="fs-lock">🔒 إغلاق الشكل</button>
+    <button id="fsUndo">↶ تراجع عن آخر نقطة</button>
+    <button id="fsClear" class="fs-danger">🗑 مسح المسار</button>
+    <button id="fsSave">💾 حفظ النتيجة</button>
+    <button id="fsPdf" class="fs-pdf">📄 تصدير PDF</button>
+  </div>
+  <div id="fsStateTag"></div>
+  <div class="fs-live">
+    <div><small>المحيط المستهدف</small><b id="fsvTarget">—</b></div>
+    <div><small>المسافة المقطوعة</small><b id="fsvDone">0 م</b></div>
+    <div><small>المسافة المتبقية</small><b id="fsvLeft">—</b></div>
+    <div><small>نسبة الإنجاز</small><b id="fsvPct">—</b></div>
+    <div><small>دقة GPS</small><b id="fsvAcc">—</b></div>
+    <div><small>نوع الحركة</small><b id="fsvType">مشي</b></div>
+  </div>
+  <div class="fs-bar"><div id="fsBarFill"></div></div>
+  <div id="fsInfo"></div>
+  <div id="fsResult"></div>
+</div>
+
+<div id="fsToast"></div>
+<div id="fsNear">
+  <div class="fs-near-msg">📍 أصبحت قريبًا من نقطة البداية، هل تريد إغلاق الشكل؟</div>
+  <div class="fs-near-btns">
+    <button id="fsNearClose">🔒 إغلاق الشكل</button>
+    <button id="fsNearLater">متابعة السير</button>
+  </div>
+</div>
+<div id="arConfirm">
+  <div class="fs-near-msg">سيتم توصيل موقعك الحالي بنقطة البداية لإغلاق الشكل وحساب المساحة، هل تريد المتابعة؟</div>
+  <div class="ar-gap">خط الإغلاق (الأحمر المتقطع على الخريطة): <b id="arGap">—</b></div>
+  <div class="fs-near-btns">
+    <button id="arYes">نعم، أغلق الشكل واحسب</button>
+    <button id="arNo">لا، استمر في التتبع</button>
+  </div>
+</div>
+<button id="arCard" type="button">📏 أنت قطعت: <b id="arDist">0 م</b> — اضغط لحساب المساحة والنسبة</button>
+
+
+<!-- ===================== مسح النظافة الميداني (وحدة مستقلة اختيارية) ===================== -->
+<div id="svCard" hidden>
+  <div class="sv-head">
+    <b>🧹 مسح ميداني لقياس تدني مستوى النظافة</b>
+    <button id="svClose" class="cc-x" type="button" aria-label="إغلاق">✖</button>
+  </div>
+  <label class="sv-switch"><input type="checkbox" id="svOn"> تشغيل وضع مسح النظافة (كل صورة جديدة تُسجَّل كملاحظة نفايات)</label>
+  <div class="sv-btns sv-quick">
+    <button type="button" id="svTrackGo">▶ بدء تتبع الجولة</button>
+    <button type="button" id="svTrackStop">⏸ إيقاف مؤقت</button>
+    <button type="button" id="svLocate">📍 موقعي الآن</button>
+    <button type="button" id="svAttach">🖼️ إرفاق صور بإحداثياتها</button>
+  </div>
+  <div id="svTrackInfo" class="sv-note"></div>
+  <div id="svApprovedTag" class="sv-approved" hidden>🔒 الجولة معتمدة — أي تعديل يتطلب كتابة السبب ويُسجَّل في سجل التعديلات</div>
+
+  <details open class="sv-sec"><summary>1. الحي ونوع التتبع</summary>
+    <div class="sv-grid">
+      <label>اسم الحي<input id="svDistrict" type="text" autocomplete="off"></label>
+      <label hidden>اسم المقاول<input id="svContractor" type="text" autocomplete="off"></label>
+      <label hidden>رقم العقد أو المشروع<input id="svContract" type="text" autocomplete="off"></label>
+      <label hidden>اسم المراقب<input id="svInspector" type="text" autocomplete="off"></label>
+      <label hidden>بداية الجولة<span class="sv-row"><input id="svStart" type="datetime-local"><button type="button" class="sv-now" data-for="svStart">الآن</button></span></label>
+      <label hidden>نهاية الجولة<span class="sv-row"><input id="svEnd" type="datetime-local"><button type="button" class="sv-now" data-for="svEnd">الآن</button></span></label>
+      <label>نوع الجولة<select id="svKind"><option value="car">🚗 سيارة</option><option value="walk">🚶 مشي</option></select></label>
+      <label>طول القطاع القياسي (م)<input id="svSegLen" type="number" inputmode="decimal" min="10" step="10" value="100"></label>
+      <label class="sv-wide">المسافة المفحوصة يدوياً (كم) — تُستخدم فقط عند عدم وجود تتبع GPS<input id="svManualKm" type="number" inputmode="decimal" min="0" step="0.1" placeholder="مثال: 5"></label>
+    </div>
+  </details>
+
+  <details class="sv-sec"><summary>2. حدود الحي ودقة GPS</summary>
+    <div class="sv-note">ارسم حدود الحي بالضغط على الخريطة نقطة بعد نقطة. تُحسب فقط المسافة والملاحظات داخل الحدود (مع الهامش). بدون حدود يُحسب المسار كاملاً.</div>
+    <div class="sv-btns">
+      <button type="button" id="svDraw">✏️ رسم حدود الحي</button>
+      <button type="button" id="svDrawDone" hidden>✔ إنهاء الرسم</button>
+      <button type="button" id="svDrawUndo" hidden>↶ آخر نقطة</button>
+      <button type="button" id="svBoundClear">🗑 مسح الحدود</button>
+    </div>
+    <div class="sv-grid">
+      <label>هامش الحدود لانحراف GPS (م)<input id="svMargin" type="number" inputmode="decimal" min="0" value="20"></label>
+    </div>
+    <div id="svBoundInfo" class="sv-note"></div>
+  </details>
+
+  <details class="sv-sec"><summary>3. أوزان الشدة وتصنيف القطاعات (حسب العقد)</summary>
+    <div class="sv-grid">
+      <label>خفيفة (نقطة)<input id="svW1" type="number" inputmode="decimal" min="0" value="1"></label>
+      <label>متوسطة (نقطة)<input id="svW2" type="number" inputmode="decimal" min="0" value="2"></label>
+      <label>شديدة (نقطة)<input id="svW3" type="number" inputmode="decimal" min="0" value="3"></label>
+      <label>تراكم كبير / نقطة سوداء<input id="svW4" type="number" inputmode="decimal" min="0" value="5"></label>
+      <label>تدنٍ خفيف حتى (نقطة)<input id="svT1" type="number" inputmode="decimal" min="0" value="2"></label>
+      <label>تدنٍ متوسط حتى (نقطة)<input id="svT2" type="number" inputmode="decimal" min="0" value="5"></label>
+      <label>القطاع «متدني النظافة» إذا تجاوزت نقاطه<input id="svDeg" type="number" inputmode="decimal" min="0" value="0"></label>
+      <label>أقصى نقاط محتسبة للقطاع (لمؤشر الشدة)<input id="svCap" type="number" inputmode="decimal" min="1" value="10"></label>
+    </div>
+    <div class="sv-note">0 نقطة = نظيف. أكثر من «تدنٍ متوسط حتى» = تدنٍ شديد.</div>
+  </details>
+
+  <details class="sv-sec"><summary>4. جدول الخصم المعتمد في العقد (اختياري)</summary>
+    <div class="sv-grid">
+      <label class="sv-wide">بند العقد المستخدم<input id="svClause" type="text" autocomplete="off" placeholder="مثال: البند 12 — جدول الجزاءات"></label>
+      <label>قيمة المستخلص (اختياري)<input id="svValue" type="number" inputmode="decimal" min="0" placeholder="ريال"></label>
+    </div>
+    <div class="sv-note">أدخل شرائح نسبة انتشار التدني ونسبة الخصم المقابلة لها كما في العقد:</div>
+    <table class="sv-ded"><thead><tr><th>من %</th><th>إلى %</th><th>الخصم %</th></tr></thead><tbody id="svDedRows"></tbody></table>
+    <div class="sv-btns"><button type="button" id="svDedAdd">＋ شريحة</button><button type="button" id="svDedDel">－ آخر شريحة</button></div>
+  </details>
+
+  <div class="sv-btns sv-main">
+    <button type="button" id="svApprove">✅ اعتماد الجولة</button>
+    <button type="button" id="svNewRound">💾 حفظ الجولة وبدء جولة جديدة</button>
+  </div>
+
+  <div id="svResult"></div>
+  <div id="svObsList"></div>
+  <div id="svRounds"></div>
+  <div id="svLog"></div>
+</div>
+
+<!-- ورقة تسجيل ملاحظة نفايات -->
+<div id="svObsSheet" class="sv-sheet" hidden>
+  <div class="sv-sheet-title">🧹 ملاحظة نفايات — الصورة <b id="svObsName"></b></div>
+  <img id="svObsImg" alt="">
+  <label>نوع المخالفة
+    <select id="svObsType">
+      <option>نفايات منزلية متناثرة</option><option>أكياس نفايات</option><option>مخلفات بناء</option><option>أثاث ومخلفات كبيرة</option>
+      <option>حاوية ممتلئة أو فائضة</option><option>مخلفات زراعية</option><option>أخرى</option>
+    </select>
+  </label>
+  <div class="sv-sev" id="svObsSev">
+    <label><input type="radio" name="svSev" value="1" checked> خفيفة</label>
+    <label><input type="radio" name="svSev" value="2"> متوسطة</label>
+    <label><input type="radio" name="svSev" value="3"> شديدة</label>
+    <label><input type="radio" name="svSev" value="4"> تراكم كبير / نقطة سوداء</label>
+  </div>
+  <label>ملاحظات المراقب<textarea id="svObsNote" rows="2"></textarea></label>
+  <div class="sv-sheet-btns">
+    <button type="button" id="svObsSave">حفظ الملاحظة</button>
+    <button type="button" id="svObsSkip">ليست ملاحظة نفايات</button>
+  </div>
+</div>
+
+<!-- ورقة الملاحظة المكررة -->
+<div id="svDupSheet" class="sv-sheet" hidden>
+  <div class="sv-sheet-title">⚠️ قد تكون هذه الملاحظة مكررة</div>
+  <div id="svDupText" class="sv-note"></div>
+  <div class="sv-sheet-btns">
+    <button type="button" id="svDupMerge">دمجها مع الملاحظة السابقة</button>
+    <button type="button" id="svDupSeparate">احتسابها ملاحظة مستقلة</button>
+  </div>
+</div>
+
+<!-- اختيار طريقة الحساب تلقائياً: محيط مُدخل أو تتبع المشي -->
+<div id="modeBox" hidden>
+  <label for="perimM" class="cc-title">أدخل طول المحيط بالمتر</label>
+  <div class="cc-row">
+    <input id="perimM" type="text" inputmode="decimal" autocomplete="off" placeholder="مثال: 100">
+    <span class="cc-unit">م</span>
+    <button id="perimClear" class="cc-x">مسح</button>
+  </div>
+  <div class="mode-hint">أدخل المحيط لحساب المساحة مباشرة، أو اتركه فارغًا لاستخدام تتبع المشي</div>
+  <div id="modeTag"></div>
+  <div id="perimResult"></div>
+</div>
+
+<div class="options" hidden>
+  <button id="trackBtn" class="track-btn">🚶 بدء تتبع المشي</button>
+  <span id="trackInfo" class="track-info"></span>
+</div>
+
+<div id="summary">
+  <div class="stat"><small id="sWalkLabel">إجمالي المسافة الممشاة</small><b id="sWalk">—</b><em id="sWalkSub"></em></div>
+  <div class="stat"><small id="sSpecLabel">إجمالي المسافة المحددة</small><b id="sSpec">—</b><em id="sSpecSub"></em></div>
+  <div class="stat pct"><small>نسبة مسافات الصور من المسافة المقطوعة</small><b id="sPdPct">—</b></div>
+  <div class="stat pct" id="gpsStatBox" hidden><small>نسبة نقاط GPS المطابقة لخطوط الصور</small><b id="sGpsPct">—</b></div>
+  <div class="stat pct"><small>نسبة المساحات (مساحة الصور ÷ مساحة المسار)</small><b id="sAreaPct">—</b></div>
+</div>
+
+<div id="expLabel" class="exp-label" hidden>🧪 حسابات تجريبية — التقييم المعتمد في «مسح النظافة» (القطاعات الثابتة وشدة الملاحظات)</div>
+<!-- طريقة حساب النسبة (ثابتة حتى لا تُفقد الكتابة أثناء تحديث GPS) -->
+<div id="calcBox" hidden>
+  <b class="calc-title">طريقة حساب النسبة</b>
+  <label><input type="radio" name="calcM" value="dist"> الحساب بالمسافة — الطريقة الحالية (الافتراضية والأدق)</label>
+  <label><input type="radio" name="calcM" value="points"> الحساب بعدد نقاط GPS</label>
+  <div id="calcPointsOpts" class="calc-opts" hidden>
+    <label for="gpsTol">مسافة السماحية</label>
+    <input id="gpsTol" type="number" inputmode="decimal" min="1" max="500" step="1" value="20"> <span>م</span>
+  </div>
+  <button id="dotsBtn" type="button">📍 إظهار نقاط GPS</button>
+  <div class="calc-legend"><i style="background:#2e7d32"></i>مطابقة <i style="background:#9e9e9e"></i>غير مطابقة <i style="background:#d32f2f"></i>مستبعدة</div>
+</div>
+
+<!-- نتيجة المساحة والنسبة من المسافة المقطوعة -->
+<div id="arResult"></div>
+
+<!-- لوحة المحيط حول النقطة M -->
+<div id="circleCard">
+  <div class="cc-head">
+    <b>⭕ المحيط حول النقطة M</b>
+    <button id="ccClose" class="cc-x" aria-label="إغلاق">✖</button>
+  </div>
+  <label for="ccValue" id="ccTitle" class="cc-title">أدخل طول المحيط المطلوب بالكيلومتر</label>
+  <div class="cc-row">
+    <input id="ccValue" type="text" inputmode="decimal" autocomplete="off" placeholder="مثال: 10">
+    <span class="cc-unit">كم</span>
+  </div>
+  <div class="cc-opts">
+    <label><input type="radio" name="ccMode" value="circ" checked> اعتبار الرقم طول المحيط</label>
+    <label><input type="radio" name="ccMode" value="radius"> اعتبار الرقم نصف القطر</label>
+  </div>
+  <div class="cc-row">
+    <span class="cc-lbl">المركز M:</span>
+    <select id="ccCenter"></select>
+  </div>
+  <div class="cc-btns">
+    <button id="ccShow">⭕ إظهار المحيط</button>
+    <button id="ccClear">إزالة الدائرة</button>
+  </div>
+  <div id="ccResult"></div>
+</div>
+
+<div id="pickBar">
+  <span id="pickText"></span>
+  <button id="pickCancel">تخطي</button>
+</div>
+
+<div class="layout">
+  <div id="map"></div>
+  <div class="side">
+    <table id="pointsTable">
+      <thead><tr><th>النقطة</th><th>الصورة</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الوقت</th></tr></thead>
+      <tbody></tbody>
+      <tfoot></tfoot>
+    </table>
+  </div>
+</div>
+
+<div id="report"></div>
+
+<script>
+  let points = [];
+  let photoMarkers = [];
+  let pickTarget = null;
+  const statusEl = document.getElementById('status');
+  const pdfBtn = document.getElementById('pdfBtn');
+  const undoBtn = document.getElementById('undoBtn');
+  const cameraInput = document.getElementById('cameraInput');
+  const autoPick = document.getElementById('autoPick');
+  const letter = i => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+  const pickName = p => p.name + "'";
+
+  // ===== إعدادات تتبع المشي =====
+  const ACC_LIMIT = 25;   // حد الدقة بالمتر: أي نقطة GPS دقتها أسوأ من هذا تُستبعد من المسافة الممشاة
+  const MIN_STEP = 3;     // المشي: لا تُسجَّل نقطة جديدة إلا بعد التحرك 3 م على الأقل (تسجيل منتظم ويمنع تذبذب GPS أثناء الوقوف)
+  let track = [];         // نقاط المسار المقبولة بالترتيب
+  let trackBad = [];      // نقاط مستبعدة لضعف الدقة (تُعرض بالأحمر)
+  let rejected = 0;       // عدد النقاط المستبعدة لضعف الدقة
+  let watchId = null;
+  let wakeLock = null;
+  let perimMode = false;   // true = حساب المساحة من المحيط المُدخل (تتبع المشي معطّل)
+  // نتيجة «المساحة والنسبة من المسافة المقطوعة»
+  let ar = null, arLayers = [], arPreviewLine = null, arPending = null;
+  // حالة «رسم محيط ميداني وحساب المساحة»
+  const fs = {
+    target: 0, type: 'walk', accLimit: 20, closeR: 20,
+    pts: [], bad: [], dist: 0, rejected: 0, jumps: 0,
+    state: 'idle',            // idle | tracking | paused | closed
+    watch: null, alert90: false, leftStart: false, nearShown: false, lastAcc: null, result: null, lastHeading: NaN
+  };
+
+  // ===== الإعدادات =====
+  function getSetting(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }
+  function setSetting(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  let viewMode = getSetting('pm_view', window.innerWidth >= 900 ? 'web' : 'mobile');
+  let shapeMode = getSetting('pm_shape', 'closed');
+  autoPick.checked = getSetting('pm_autopick', '1') === '1';
+  autoPick.onchange = () => setSetting('pm_autopick', autoPick.checked ? '1' : '0');
+  const isClosed = () => shapeMode === 'closed';
+
+  // ===== الحفظ التلقائي =====
+  const DB = {
+    open() {
+      return new Promise((res, rej) => {
+        const r = indexedDB.open('photoMapDB', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('data');
+        r.onsuccess = () => res(r.result);
+        r.onerror = () => rej(r.error);
+      });
+    },
+    async save(val, key = 'points') {
+      try {
+        const db = await this.open();
+        await new Promise((res, rej) => {
+          const tx = db.transaction('data', 'readwrite');
+          tx.objectStore('data').put(val, key);
+          tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+        });
+        return true;
+      } catch (e) { return false; }
+    },
+    async load(key = 'points', def = []) {
+      try {
+        const db = await this.open();
+        return await new Promise(res => {
+          const r = db.transaction('data').objectStore('data').get(key);
+          r.onsuccess = () => res(r.result || def);
+          r.onerror = () => res(def);
+        });
+      } catch (e) { return def; }
+    }
+  };
+  const persistTrack = () => DB.save({ track, rejected, bad: trackBad.slice(-2000) }, 'track');
+  async function persist() {
+    const ok = await DB.save(points);
+    if (!ok) statusEl.textContent = '⚠️ تعذّر الحفظ التلقائي في هذا المتصفح — لا تغلق الصفحة قبل التصدير.';
+  }
+
+  // ===== الحسابات =====
+  function distM(a, b) {
+    const R = 6371008.8, r = Math.PI / 180;
+    const dLat = (b.lat - a.lat) * r, dLng = (b.lng - a.lng) * r;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  // مساحة ومحيط مجموعة إحداثيات
+  function polyStats(coords, closed) {
+    if (coords.length < 2) return { area: 0, perim: 0 };
+    const R = 6371008.8, lat0 = coords[0].lat * Math.PI / 180;
+    const xy = coords.map(p => [R * p.lng * Math.PI / 180 * Math.cos(lat0), R * p.lat * Math.PI / 180]);
+    let area = 0, perim = 0;
+    const cl = closed && xy.length >= 3;
+    for (let i = 0; i < xy.length; i++) {
+      const [x1, y1] = xy[i], [x2, y2] = xy[(i + 1) % xy.length];
+      area += x1 * y2 - x2 * y1;
+      if (i < xy.length - 1 || cl) perim += Math.hypot(x2 - x1, y2 - y1);
+    }
+    return { area: cl ? Math.abs(area) / 2 : 0, perim };
+  }
+  const photoCoords = () => points.map(p => ({ lat: p.lat, lng: p.lng }));
+  // الإحداثيات المحددة يدوياً فقط، بالترتيب (إحداثيات الصور لا تدخل في حساب النسبة)
+  const pickedCoords = () => points.filter(p => p.pick).map(p => p.pick);
+  const pickedCount = () => points.filter(p => p.pick).length;
+
+  // «المسافة المحددة» لنقطة واحدة = المسافة بين النقطة وإحداثيتها المحددة (A ↔ A')، بالمتر
+  // مقرّبة لأقرب 0.1 م حتى يطابق المجموع الأرقام الظاهرة في الجدول تماماً
+  const pairDist = p => p.pick ? Math.round(distM(p, p.pick) * 10) / 10 : null;
+
+  // إجمالي المسافة المحددة (بالمتر) = مجموع «المسافة المحددة» للنقاط المختارة فقط
+  // لا يدخل فيه أي خط بين النقاط، ولا المسافة بين نقطة وأخرى
+  function specStats() {
+    const chosen = points.filter(p => p.pick);
+    if (!chosen.length) return { n: 0, dist: null, label: 'إجمالي المسافة المحددة' };
+    const dist = Math.round(chosen.reduce((s, p) => s + pairDist(p), 0) * 10) / 10;
+    return { n: chosen.length, dist, label: 'إجمالي المسافة المحددة' };
+  }
+
+  // إجمالي المسافة الممشاة (بالمتر): مجموع المسافات بين كل نقطة مسار والتي تليها
+  function walkedDist() {
+    let d = 0;
+    for (let i = 0; i < track.length - 1; i++) d += distM(track[i], track[i + 1]);
+    return d;
+  }
+
+  // النسبة = (المسافة المحددة ÷ المسافة الممشاة) × 100 ، كلها بالمتر
+  const NO_WALK_MSG = 'لا يمكن حساب النسبة لعدم توفر مسافة ممشاة';
+  // الطريقة الأولى: المساحة من المحيط المُدخل (بالمتر) على افتراض أن الشكل دائرة
+  function perimCalc(P) {
+    const radius = P / (2 * Math.PI);
+    return { circ: P, radius, area: (P * P) / (4 * Math.PI) };   // = π × r²
+  }
+  // الطريقة الثانية: محيط مسار المشي المغلق ومساحته (من نقاط GPS المقبولة)
+  function trackShape() {
+    if (track.length < 3) return null;
+    return polyStats(track, true);   // المحيط يشمل الرجوع من آخر نقطة إلى أول نقطة
+  }
+
+  // المسافة الأساسية للنسبة: المحيط المُدخل في وضع المحيط، أو مسافة المشي في وضع التتبع
+  const enteredPerim = () => parseKm(document.getElementById('perimM').value);
+  const baseDist = () => perimMode ? (enteredPerim() || 0) : walkedDist();
+  function ratio() {
+    const w = baseDist(), s = specStats();
+    if (!(w > 0) || !isFinite(w)) return { ok: false, text: NO_WALK_MSG };
+    if (s.dist === null) return { ok: false, text: 'حدّد نقطة واحدة على الأقل' };
+    const pct = s.dist / w * 100;
+    if (!isFinite(pct)) return { ok: false, text: NO_WALK_MSG };
+    const r = pct < 10 ? Math.round(pct * 100) / 100 : Math.round(pct * 10) / 10;
+    return { ok: true, pct, text: r + '%' };
+  }
+  const fmtLen = m => m >= 1000 ? (m / 1000).toFixed(2) + ' كم' : m.toFixed(1) + ' م';
+  const fmtArea = a => a >= 10000 ? (a / 10000).toFixed(2) + ' هكتار' : a.toFixed(1) + ' م²';
+  const fmtAreaFull = a => a >= 10000 ? (a / 10000).toFixed(2) + ' هكتار (' + Math.round(a).toLocaleString('en') + ' م²)' : a.toFixed(1) + ' م²';
+  // إذا قُرئت الإحداثيات من نص الصورة تُعرض كما هي مكتوبة بالضبط
+  const ll = c => c.latText ? `${c.latText}, ${c.lngText}` : `${c.lat.toFixed(6)}, ${c.lng.toFixed(6)}`;
+
+  // ===== الخريطة =====
+  const map = L.map('map').setView([24.7136, 46.6753], 6);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, maxNativeZoom: 19, attribution: 'Esri'
+  }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+    maxZoom: 20, maxNativeZoom: 19
+  }).addTo(map);
+  // ===== بوصلة: الشمال دائماً لأعلى الشاشة =====
+  // لا يُطبَّق أي rotate على #map أو طبقات Leaflet. هذه الدالة تزيل أي دوران قد تضيفه إضافة خارجية أو المتصفح،
+  // وتُبقي مستوى التكبير والموقع كما هما.
+  function resetNorth() {
+    const c = map.getCenter(), z = map.getZoom();
+    const els = [document.getElementById('map'), ...document.querySelectorAll('#map .leaflet-map-pane, #map .leaflet-tile-pane, #map .leaflet-container')];
+    let changed = false;
+    els.forEach(el => { if (el && /rotate/.test(el.style.transform || '')) { el.style.transform = el.style.transform.replace(/rotate\([^)]*\)/g, '').trim(); changed = true; } });
+    if (typeof map.setBearing === 'function') map.setBearing(0);
+    if (changed) { map.invalidateSize({ pan: false }); map.setView(c, z, { animate: false }); }
+  }
+  const NorthControl = L.Control.extend({
+    options: { position: 'topleft' },
+    onAdd() {
+      const d = L.DomUtil.create('div', 'north-badge leaflet-bar');
+      d.innerHTML = '<span>N</span><span>↑</span>';
+      d.title = 'الشمال لأعلى — اضغط لإعادة توجيه الخريطة للشمال';
+      L.DomEvent.disableClickPropagation(d);
+      d.onclick = resetNorth;
+      return d;
+    }
+  });
+  map.addControl(new NorthControl());
+
+  const shape = L.polygon([], { color: '#3b3bff', weight: 6, fillColor: '#3b3bff', fillOpacity: 0.12 }).addTo(map);
+  const line = L.polyline([], { color: '#3b3bff', weight: 6 }).addTo(map);
+  const pickShape = L.polygon([], { color: '#ef6c00', weight: 4, dashArray: '10 8', fillColor: '#ef6c00', fillOpacity: 0.18 }).addTo(map);
+  const pickLine = L.polyline([], { color: '#ef6c00', weight: 4, dashArray: '10 8' }).addTo(map);
+  const trackLine = L.polyline([], { color: '#00e676', weight: 3, opacity: 0.95 }).addTo(map);
+  const layer = L.layerGroup().addTo(map);
+
+  // ===== تتبع المشي =====
+  const trackBtn = document.getElementById('trackBtn');
+  function updateTrackInfo() {
+    const w = walkedDist();
+    document.getElementById('trackInfo').textContent =
+      (watchId !== null ? '🟢 جاري التتبع — ' : '') +
+      `نقاط المسار: ${track.length} مقبولة، ${rejected} مستبعدة (دقة أسوأ من ${ACC_LIMIT} م)` +
+      (track.length > 1 ? ` — المسافة: ${fmtLen(w)}` : '');
+    arUpdateCard();
+  }
+  async function keepAwake() {
+    try { if ('wakeLock' in navigator && watchId !== null) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') keepAwake(); });
+
+  function onTrackPos(pos) {
+    const c = pos.coords;
+    if (!(c.accuracy <= ACC_LIMIT)) { rejected++; trackBad.push({ lat: c.latitude, lng: c.longitude, why: 'acc' }); updateTrackInfo(); return; }   // استبعاد الدقة الضعيفة
+    const pt = { lat: +c.latitude.toFixed(6), lng: +c.longitude.toFixed(6), acc: Math.round(c.accuracy), t: Date.now() };
+    const last = track[track.length - 1];
+    if (last && distM(last, pt) < MIN_STEP) return;
+    track.push(pt);
+    trackLine.addLatLng([pt.lat, pt.lng]);
+    persistTrack();
+    updateTrackInfo();
+    updateSummary();
+  }
+  function startTrack() {
+    if (perimMode) { statusEl.textContent = 'تتبع المشي معطّل لأنك أدخلت طول المحيط. امسح خانة المحيط لتفعيله.'; return; }
+    if (!navigator.geolocation) { statusEl.textContent = 'المتصفح لا يدعم تحديد الموقع.'; return; }
+    watchId = navigator.geolocation.watchPosition(onTrackPos,
+      err => { statusEl.textContent = 'تعذّر تتبع الموقع: ' + err.message; },
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+    trackBtn.textContent = '⏹ إيقاف تتبع المشي';
+    trackBtn.classList.add('on');
+    keepAwake();
+    updateTrackInfo();
+    statusEl.textContent = 'بدأ تتبع المشي — أبقِ الصفحة مفتوحة أثناء المشي.';
+  }
+  function stopTrack() {
+    if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+    try { if (wakeLock) wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+    trackBtn.textContent = track.length ? '🚶 متابعة تتبع المشي' : '🚶 بدء تتبع المشي';
+    trackBtn.classList.remove('on');
+    updateTrackInfo();
+  }
+  trackBtn.onclick = () => watchId === null ? startTrack() : stopTrack();
+
+  // ===== المحيط (دائرة حول النقطة M) =====
+  const ccCard = document.getElementById('circleCard');
+  const ccValue = document.getElementById('ccValue');
+  const ccCenter = document.getElementById('ccCenter');
+  const ccResult = document.getElementById('ccResult');
+  let circleLayer = null, circleMarker = null, circleInfo = null, ccTimer = null;
+  let circleState = (() => { try { return JSON.parse(getSetting('pm_circle', 'null')) || {}; } catch (e) { return {}; } })();
+  const saveCircle = () => setSetting('pm_circle', JSON.stringify(circleState));
+  const ccMode = () => (document.querySelector('input[name="ccMode"]:checked') || {}).value || 'circ';
+
+  // يقبل 0.5 و 3,5 و ٣٫٥
+  function parseKm(s) {
+    const t = String(s || '').replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).replace(/[٫,]/g, '.').trim();
+    const n = parseFloat(t);
+    return isFinite(n) && n > 0 ? n : null;
+  }
+  // الحساب كله بالمتر
+  function circleCalc(km, mode) {
+    const radius = mode === 'radius' ? km * 1000 : (km * 1000) / (2 * Math.PI);
+    return { radius, circ: 2 * Math.PI * radius, area: Math.PI * radius * radius };
+  }
+  const fmtM2 = a => (a < 100000 ? (Math.round(a * 10) / 10).toLocaleString('en') : Math.round(a).toLocaleString('en')) + ' م²';
+  // طول بدون أصفار زائدة: 100 م، 15.92 م، 1.59 كم
+  const fmtLenC = m => m >= 1000 ? fmtLen(m) : (Math.round(m * 100) / 100) + ' م';
+  const fmtKm2 = a => (a / 1e6).toLocaleString('en', { maximumFractionDigits: 3 }) + ' كم²';
+  const fmtRad = r => r >= 1000 ? (r / 1000).toFixed(3) + ' كم (' + r.toFixed(1) + ' م)' : r.toFixed(2) + ' م';
+
+  function fillCenters(selectKey) {
+    const cur = selectKey || ccCenter.value || circleState.centerKey;
+    ccCenter.innerHTML = points.map((p, i) => `<option value="p${i}">النقطة ${p.name} — ${ll(p)}</option>`).join('') +
+      '<option value="here">📍 موقعي الحالي</option>';
+    const valid = [...ccCenter.options].some(o => o.value === cur);
+    ccCenter.value = valid ? cur : (points.length ? 'p' + (points.length - 1) : 'here');
+  }
+  function updateCcTitle() {
+    document.getElementById('ccTitle').textContent = ccMode() === 'radius'
+      ? 'أدخل نصف القطر بالكيلومتر' : 'أدخل طول المحيط المطلوب بالكيلومتر';
+  }
+  function openCircleCard(selectKey) {
+    fillCenters(selectKey);
+    ccCard.classList.add('open');
+    updateCcTitle();
+  }
+  async function resolveCenter(useCache) {
+    const k = ccCenter.value;
+    if (k === 'here') {
+      if (useCache && circleState.centerKey === 'here' && circleState.center) return circleState.center;
+      ccResult.className = ''; ccResult.textContent = 'جاري تحديد موقعك الحالي...';
+      const c = await getHere();   // يطلب إذن الموقع
+      return { lat: c.latitude, lng: c.longitude, label: 'موقعي الحالي' };
+    }
+    const p = points[+k.slice(1)];
+    return p ? { lat: p.lat, lng: p.lng, label: 'النقطة ' + p.name } : null;
+  }
+  function removeCircleLayers() {
+    if (circleLayer) map.removeLayer(circleLayer);
+    if (circleMarker) map.removeLayer(circleMarker);
+    if (circleInfo) circleInfo.remove();
+    circleLayer = circleMarker = circleInfo = null;
+  }
+  function ccError(msg) { ccResult.className = 'err'; ccResult.textContent = msg; }
+
+  async function drawCircle(opts = {}) {
+    const km = parseKm(ccValue.value);
+    if (!km) { removeCircleLayers(); return ccError('أدخل رقماً أكبر من صفر، مثل 0.5 أو 10'); }
+    let c;
+    try { c = await resolveCenter(opts.useCache); }
+    catch (e) { return ccError('تعذّر تحديد موقعك الحالي — اسمح للمتصفح بالوصول إلى الموقع.'); }
+    if (!c) return ccError('اختر مركز الدائرة M');
+
+    const mode = ccMode();
+    const k = circleCalc(km, mode);
+    removeCircleLayers();   // حذف الدائرة السابقة قبل رسم الجديدة
+    circleLayer = L.circle([c.lat, c.lng], {
+      radius: k.radius, color: '#8e24aa', weight: 4, fillColor: '#ce93d8', fillOpacity: 0.18
+    }).addTo(map);
+    // علامة M فوق المركز بسهم يشير إليه، حتى تبقى علامة الصورة تحتها ظاهرة
+    const icon = L.divIcon({ className: '', html: '<div class="m-icon">M</div><div class="m-stem"></div>', iconSize: [36, 56], iconAnchor: [18, 56] });
+    circleMarker = L.marker([c.lat, c.lng], { icon, zIndexOffset: 1000 }).addTo(map)
+      .bindPopup(`<div class="popup-box"><b>مركز المحيط M</b><br>${c.label}<br><span dir="ltr">${c.lat.toFixed(7)}, ${c.lng.toFixed(7)}</span></div>`);
+
+    const html = `<b>⭕ المحيط حول M</b><br>
+      المركز M: ${c.label}<br>
+      طول المحيط: <b>${fmtLenC(k.circ)}</b><br>
+      نصف القطر: <b>${fmtRad(k.radius)}</b><br>
+      المساحة: <b>${fmtM2(k.area)}</b><br>
+      = <b>${fmtKm2(k.area)}</b>`;
+    circleInfo = document.createElement('div');
+    circleInfo.className = 'circle-info';
+    circleInfo.innerHTML = html;
+    map.getContainer().appendChild(circleInfo);
+
+    ccResult.className = '';
+    ccResult.innerHTML = (mode === 'circ'
+      ? `نصف القطر = (${km} × 1000) ÷ (2 × π) = <b>${k.radius.toFixed(1)} م</b>`
+      : `نصف القطر = ${km} × 1000 = <b>${k.radius.toFixed(1)} م</b>`) +
+      `<br>طول المحيط: <b>${fmtLenC(k.circ)}</b> — المساحة: <b>${fmtM2(k.area)}</b> (${fmtKm2(k.area)})`;
+
+    circleState = { value: ccValue.value, mode, centerKey: ccCenter.value, center: c, shown: true, radius: k.radius, circ: k.circ, area: k.area, fromPerim: perimMode };
+    saveCircle();
+    if (opts.fit !== false) map.fitBounds(circleLayer.getBounds(), { padding: [20, 20] });
+  }
+  function clearCircle() {
+    removeCircleLayers();
+    circleState.shown = false; saveCircle();
+    ccResult.className = ''; ccResult.textContent = 'تمت إزالة الدائرة.';
+  }
+
+  document.getElementById('circleBtn').onclick = () => {
+    if (ccCard.classList.contains('open')) ccCard.classList.remove('open'); else openCircleCard();
+  };
+  document.getElementById('ccClose').onclick = () => ccCard.classList.remove('open');
+  document.getElementById('ccShow').onclick = async () => {
+    await drawCircle();
+    // على الجوال: الانتقال للخريطة حتى تظهر الدائرة كاملة
+    if (circleLayer) document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  document.getElementById('ccClear').onclick = clearCircle;
+  // عند تغيير القيمة تُرسم الدائرة الجديدة مباشرة
+  ccValue.addEventListener('input', () => {
+    clearTimeout(ccTimer);
+    ccTimer = setTimeout(() => { if (parseKm(ccValue.value)) drawCircle({ useCache: true }); }, 450);
+  });
+  ccValue.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); drawCircle(); } });
+  document.querySelectorAll('input[name="ccMode"]').forEach(r => r.onchange = () => {
+    updateCcTitle();
+    if (parseKm(ccValue.value)) drawCircle({ useCache: true });
+  });
+  ccCenter.onchange = () => { if (parseKm(ccValue.value)) drawCircle(); };
+
+  // بعد التقاط أو رفع صورة: تظهر اللوحة ومركزها النقطة الجديدة
+  function onNewPhoto(i) {
+    openCircleCard('p' + i);
+    if (perimMode) applyPerimeter();   // وضع المحيط: ارسم الدائرة حول الصورة الجديدة مباشرة
+    else if (circleState.shown && parseKm(ccValue.value)) drawCircle({ fit: false });
+  }
+
+  // ===== التبديل التلقائي بين: المحيط المُدخل ↔ تتبع المشي =====
+  const perimInput = document.getElementById('perimM');
+  const perimResult = document.getElementById('perimResult');
+  let perimTimer = null;
+
+  function updateModeUI() {
+    const tag = document.getElementById('modeTag');
+    if (perimMode) {
+      tag.className = 'perim';
+      tag.textContent = '🟣 الوضع الحالي: حساب المساحة من المحيط — تتبع المشي معطّل';
+      trackBtn.disabled = true;
+      trackBtn.textContent = '🚶 تتبع المشي معطّل (وضع المحيط)';
+      document.getElementById('trackInfo').style.display = 'none';
+    } else {
+      tag.className = 'walk';
+      tag.textContent = '🟢 الوضع الحالي: تتبع المشي باستخدام GPS';
+      trackBtn.disabled = false;   // إعادة تفعيل زر التتبع تلقائياً
+      if (watchId === null) trackBtn.textContent = track.length ? '🚶 متابعة تتبع المشي' : '🚶 بدء تتبع المشي';
+      document.getElementById('trackInfo').style.display = '';
+      updateTrackInfo();
+    }
+  }
+
+  async function applyPerimeter() {
+    const P = enteredPerim();
+    setSetting('pm_perim', P ? perimInput.value : '');
+
+    if (!P) {
+      // خانة فارغة أو صفر → وضع تتبع المشي
+      if (perimMode) {
+        perimMode = false;
+        if (circleState.fromPerim) clearCircle();
+        statusEl.textContent = 'تم الرجوع إلى وضع تتبع المشي.';
+      }
+      perimResult.classList.remove('show');
+      updateModeUI(); updateSummary();
+      return;
+    }
+
+    // رقم أكبر من صفر → وضع المحيط
+    if (!perimMode) {
+      if (watchId !== null) {
+        const ok = confirm('تتبع المشي يعمل الآن.\nهل تريد إيقافه وحساب المساحة من المحيط المُدخل؟');
+        if (!ok) { perimInput.value = ''; setSetting('pm_perim', ''); return; }
+        stopTrack();
+      }
+      perimMode = true;
+    }
+
+    const k = perimCalc(P);
+    perimResult.innerHTML = `
+      طول المحيط: <b>${fmtLenC(k.circ)}</b><br>
+      نصف القطر = ${fmtLenC(P)} ÷ (2 × π) = <b>${fmtRad(k.radius)}</b><br>
+      المساحة = π × نق² = <b>${fmtM2(k.area)}</b>${k.area >= 10000 ? ` (${fmtKm2(k.area)})` : ''}
+      <small>⚠️ المساحة تقديرية على افتراض أن الشكل دائرة؛ معرفة المحيط وحده لا تكفي لحساب مساحة الأشكال غير المنتظمة.</small>`;
+    perimResult.classList.add('show');
+    updateModeUI(); updateSummary();
+
+    // رسم الدائرة حول M بدون تشغيل الموقع
+    ccValue.value = String(P / 1000);
+    const circR = document.querySelector('input[name="ccMode"][value="circ"]'); if (circR) circR.checked = true;
+    updateCcTitle();
+    if (points.length) {
+      const key = ccCenter.value && ccCenter.value.startsWith('p') ? ccCenter.value : 'p' + (points.length - 1);
+      fillCenters(key);
+      await drawCircle();
+    } else {
+      perimResult.innerHTML += '<small>📷 التقط صورة أو ارفعها لتحديد النقطة M ورسم الدائرة على الخريطة.</small>';
+    }
+  }
+
+  perimInput.addEventListener('input', () => { clearTimeout(perimTimer); perimTimer = setTimeout(applyPerimeter, 500); });
+  perimInput.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(perimTimer); applyPerimeter(); } });
+  document.getElementById('perimClear').onclick = () => { perimInput.value = ''; clearTimeout(perimTimer); applyPerimeter(); };
+
+  // ======================================================================
+  // ===== رسم محيط ميداني وحساب المساحة =====
+  // ======================================================================
+  const FS_STYLE = {
+    walk: { color: '#1565c0', weight: 5, fill: '#1565c0', minStep: 3, maxSpeed: 8, label: 'مشي' },    // 8 م/ث ≈ 29 كم/س
+    car:  { color: '#2e7d32', weight: 9, fill: '#2e7d32', minStep: 8, maxSpeed: 60, label: 'سيارة' }  // 60 م/ث ≈ 216 كم/س
+  };
+  const fsEl = id => document.getElementById(id);
+  const fsLine = L.polyline([], { color: FS_STYLE.walk.color, weight: FS_STYLE.walk.weight, lineJoin: 'round', lineCap: 'round' }).addTo(map);
+  let fsPoly = null, fsMe = null, fsAccCircle = null, fsStartMk = null, fsStartZone = null, fsWake = null, fsToastTimer = null;
+
+  // مساحة الشكل المغلق بالمتر المربع — Turf.js، وإن لم يُحمَّل نستخدم نفس معادلته
+  function fsRingAreaFallback(ring) {      // نفس خوارزمية turf.area (نصف قطر الأرض 6378137)
+    const R = 6378137, rad = d => d * Math.PI / 180, n = ring.length;
+    if (n <= 2) return 0;
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      let lo, mi, up;
+      if (i === n - 2) { lo = n - 2; mi = n - 1; up = 0; }
+      else if (i === n - 1) { lo = n - 1; mi = 0; up = 1; }
+      else { lo = i; mi = i + 1; up = i + 2; }
+      total += (rad(ring[up][0]) - rad(ring[lo][0])) * Math.sin(rad(ring[mi][1]));
+    }
+    return Math.abs(total * R * R / 2);
+  }
+  function fsArea(pts) {
+    const ring = pts.map(p => [p.lng, p.lat]);
+    ring.push([pts[0].lng, pts[0].lat]);          // إغلاق: آخر نقطة = أول نقطة
+    if (window.turf && turf.area && turf.polygon) {
+      try { return { area: turf.area(turf.polygon([ring])), by: 'Turf.js' }; } catch (e) {}
+    }
+    return { area: fsRingAreaFallback(ring), by: 'معادلة Turf الاحتياطية' };
+  }
+  function bearing(a, b) {
+    const r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r);
+    const x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+    return (Math.atan2(y, x) / r + 360) % 360;
+  }
+  function fsRecalcDist() {
+    fs.dist = 0;
+    for (let i = 1; i < fs.pts.length; i++) fs.dist += distM(fs.pts[i - 1], fs.pts[i]);   // Haversine بين كل نقطتين متتاليتين
+  }
+  const fsSave = () => DB.save({
+    target: fs.target, type: fs.type, accLimit: fs.accLimit, closeR: fs.closeR, pts: fs.pts, dist: fs.dist,
+    rejected: fs.rejected, jumps: fs.jumps, bad: fs.bad.slice(-2000), state: fs.state === 'tracking' ? 'paused' : fs.state, alert90: fs.alert90, result: fs.result
+  }, 'field');
+
+  function fsToast(msg, ms = 9000) {
+    const t = fsEl('fsToast');
+    t.textContent = msg; t.classList.add('show');
+    clearTimeout(fsToastTimer); fsToastTimer = setTimeout(() => t.classList.remove('show'), ms);
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+  }
+  fsEl('fsToast').onclick = () => fsEl('fsToast').classList.remove('show');
+
+  // علامة الموقع الحالي: شخص يمشي مع سهم الاتجاه، أو سيارة تتجه حسب الحركة.
+  // الخريطة لا تُدوَّر أبداً (الشمال دائماً للأعلى) — يُدوَّر الرمز وحده.
+  // رسم الرمزين مقدمته للأعلى (الشمال)، لذلك الإزاحة 0. لو كانت أيقونة متجهة للأسفل تصبح الإزاحة 180.
+  const ICON_OFFSET = 0;
+  const iconRotation = heading => ((isFinite(heading) ? heading : 0) + ICON_OFFSET + 360) % 360;
+  function fsMeIcon(heading) {
+    const h = iconRotation(isFinite(heading) ? heading : fs.lastHeading);
+    if (fs.type === 'car') {
+      return L.divIcon({ className: '', iconSize: [40, 40], iconAnchor: [20, 20], html:
+        `<svg width="40" height="40" viewBox="0 0 40 40"><g transform="rotate(${h} 20 20)">
+          <rect x="12" y="4" width="16" height="32" rx="6" fill="#2e7d32" stroke="#fff" stroke-width="2.5"/>
+          <rect x="14.5" y="9" width="11" height="7" rx="2" fill="#c8e6c9"/>
+          <rect x="14.5" y="26" width="11" height="5" rx="2" fill="#a5d6a7"/>
+          <path d="M20 0 L24 5 L16 5 Z" fill="#1b5e20"/></g></svg>` });
+    }
+    // المشي: الشخص ثابت، والسهم الأزرق حوله يشير لاتجاه السير
+    const arrow = isFinite(heading) || isFinite(fs.lastHeading)
+      ? `<svg class="fs-dir" width="56" height="56" viewBox="0 0 56 56"><g transform="rotate(${h} 28 28)"><path d="M28 1 L36 13 L28 10 L20 13 Z" fill="#0d47a1" stroke="#fff" stroke-width="1.5"/></g></svg>` : '';
+    return L.divIcon({ className: '', iconSize: [56, 56], iconAnchor: [28, 28], html: `<div class="fs-me-wrap">${arrow}<div class="fs-me">🚶</div></div>` });
+  }
+  function fsUpdateMe(lat, lng, acc, heading) {
+    const ll2 = [lat, lng];
+    if (!fsMe) fsMe = L.marker(ll2, { icon: fsMeIcon(heading), zIndexOffset: 2000 }).addTo(map);
+    else { fsMe.setLatLng(ll2); fsMe.setIcon(fsMeIcon(heading)); }
+    if (acc != null) {
+      if (!fsAccCircle) fsAccCircle = L.circle(ll2, { radius: acc, color: FS_STYLE[fs.type].color, weight: 1, fillOpacity: 0.08, interactive: false }).addTo(map);
+      else { fsAccCircle.setLatLng(ll2); fsAccCircle.setRadius(acc); }
+    }
+  }
+  function fsDrawStart() {
+    if (fsStartMk) { map.removeLayer(fsStartMk); fsStartMk = null; }
+    if (fsStartZone) { map.removeLayer(fsStartZone); fsStartZone = null; }
+    if (!fs.pts.length) return;
+    const p = fs.pts[0];
+    fsStartMk = L.marker([p.lat, p.lng], { zIndexOffset: 1500, icon: L.divIcon({ className: '', iconSize: [70, 24], iconAnchor: [35, 34], html: '<div class="fs-start">🏁 البداية</div>' }) }).addTo(map);
+    if (fs.state !== 'closed')
+      fsStartZone = L.circle([p.lat, p.lng], { radius: fs.closeR, color: '#000', weight: 2, dashArray: '6 6', fillOpacity: 0.05, interactive: false }).addTo(map);
+  }
+  function fsRedrawPath() {
+    const st = FS_STYLE[fs.type];
+    fsLine.setStyle({ color: st.color, weight: st.weight });
+    fsLine.setLatLngs(fs.pts.map(p => [p.lat, p.lng]));
+    if (fsPoly) { map.removeLayer(fsPoly); fsPoly = null; }
+    if (fs.state === 'closed' && fs.pts.length >= 3) {
+      fsPoly = L.polygon(fs.pts.map(p => [p.lat, p.lng]), { color: st.color, weight: 3, fillColor: st.fill, fillOpacity: 0.25 }).addTo(map);
+    }
+    fsDrawStart();
+    if (fs.pts.length >= 2 && !isFinite(fs.lastHeading)) fs.lastHeading = bearing(fs.pts[fs.pts.length - 2], fs.pts[fs.pts.length - 1]);
+    if (fsMe) fsMe.setIcon(fsMeIcon(fs.lastHeading));
+  }
+
+  function fsUpdateUI() {
+    const st = FS_STYLE[fs.type];
+    const T = fs.target * 1000, D = fs.dist;
+    fsEl('fsvTarget').textContent = T > 0 ? fmtLenC(T) : '—';
+    fsEl('fsvDone').textContent = fmtLenC(D);
+    if (T > 0) {
+      const left = T - D, pct = D / T * 100;
+      fsEl('fsvLeft').textContent = left >= 0 ? fmtLenC(left) : 'تجاوزت بـ ' + fmtLenC(-left);
+      fsEl('fsvPct').textContent = (Math.round(pct * 10) / 10) + '%';
+      const bar = fsEl('fsBarFill');
+      bar.style.width = Math.min(100, pct) + '%';
+      bar.className = pct >= 100 ? 'done' : pct >= 90 ? 'near' : '';
+    } else {
+      fsEl('fsvLeft').textContent = '—'; fsEl('fsvPct').textContent = '—'; fsEl('fsBarFill').style.width = '0';
+    }
+    fsEl('fsvAcc').textContent = fs.lastAcc != null ? '±' + Math.round(fs.lastAcc) + ' م' : '—';
+    fsEl('fsvType').textContent = (fs.type === 'car' ? '🚗 ' : '🚶 ') + st.label;
+    const fromStart = fs.pts.length ? distM(fs.pts[fs.pts.length - 1], fs.pts[0]) : null;
+    fsEl('fsInfo').textContent = `نقاط المسار: ${fs.pts.length} — مستبعدة لضعف الدقة: ${fs.rejected} — قفزات مستبعدة: ${fs.jumps}` +
+      (fromStart !== null && fs.pts.length > 1 ? ` — البعد عن نقطة البداية: ${fmtLenC(fromStart)}` : '');
+
+    const tag = fsEl('fsStateTag');
+    tag.className = fs.state;
+    tag.textContent = { idle: '⚪ جاهز — أدخل المحيط المستهدف واضغط «بدء التتبع»', tracking: '🔵 جاري التسجيل… تحرّك على حدود المكان',
+      paused: '🟡 متوقف مؤقتاً — اضغط «متابعة» للاستمرار', closed: '🟢 تم إغلاق الشكل وحساب المساحة' }[fs.state];
+
+    const has = fs.pts.length > 0;
+    // «بدء التتبع» متاح دائماً إلا أثناء التسجيل، ويصبح «بدء مسار جديد» إذا كان هناك مسار سابق
+    fsEl('fsStart').disabled = fs.state === 'tracking';
+    fsEl('fsStart').textContent = fs.pts.length ? '🔄 بدء مسار جديد' : '▶ بدء التتبع';
+    fsEl('fsPause').disabled = fs.state !== 'tracking';
+    fsEl('fsResume').disabled = fs.state !== 'paused';
+    fsEl('fsCloseShape').disabled = !((fs.state === 'tracking' || fs.state === 'paused') && fs.pts.length >= 3);
+    fsEl('fsUndo').disabled = !has;
+    fsEl('fsClear').disabled = !has;
+    fsEl('fsSave').disabled = !has;
+    fsEl('fsPdf').disabled = !has && !points.length;
+    document.querySelectorAll('#fsType button').forEach(b => b.classList.toggle('on', b.dataset.t === fs.type));
+    pdfBtn.disabled = points.length === 0 && !has;
+    fsRenderResult();
+    arUpdateCard();
+    if (typeof svTrackUI === 'function') svTrackUI();
+  }
+
+  function fsRenderResult() {
+    const box = fsEl('fsResult');
+    if (fs.state !== 'closed' || !fs.result) { box.classList.remove('show'); return; }
+    const r = fs.result, T = r.target;
+    box.innerHTML = `
+      <div class="big"><small>المساحة</small><b>${Math.round(r.area).toLocaleString('en')} م²</b></div>
+      <table>
+        <tr><td>المساحة بالكيلومتر المربع</td><td><b>${(r.area / 1e6).toLocaleString('en', { maximumFractionDigits: 4 })} كم²</b></td></tr>
+        <tr><td>المساحة بالهكتار</td><td><b>${(r.area / 1e4).toLocaleString('en', { maximumFractionDigits: 3 })} هكتار</b></td></tr>
+        <tr><td>المحيط المستهدف</td><td><b>${T > 0 ? fmtLenC(T) : '—'}</b></td></tr>
+        <tr><td>المحيط الفعلي الذي تحركته</td><td><b>${fmtLenC(r.perim)}</b></td></tr>
+        <tr><td>الفرق بينهما</td><td><b>${T > 0 ? (Math.abs(r.perim - T) < 0.05 ? '0 م' : (r.perim - T > 0 ? '+' : '−') + fmtLenC(Math.abs(r.perim - T))) : '—'}</b></td></tr>
+        <tr><td>نوع الحركة</td><td>${FS_STYLE[r.type].label}</td></tr>
+        <tr><td>عدد النقاط</td><td>${r.n}</td></tr>
+      </table>
+      <div style="font-size:11px;color:#667;margin-top:6px">المحيط الفعلي = المسافة المقطوعة + المسافة من آخر نقطة إلى نقطة البداية. حُسبت المساحة بـ ${r.by}.</div>`;
+    box.classList.add('show');
+  }
+
+  // استقبال نقطة GPS
+  function fsOnPos(pos) {
+    const c = pos.coords;
+    fs.lastAcc = c.accuracy;
+    if (fs.state !== 'tracking') { fsUpdateUI(); return; }
+    const st = FS_STYLE[fs.type];
+    if (!(c.accuracy <= fs.accLimit)) { fs.rejected++; fs.bad.push({ lat: c.latitude, lng: c.longitude, why: 'acc' }); fsUpdateUI(); return; }      // دقة ضعيفة
+    const pt = { lat: c.latitude, lng: c.longitude, acc: Math.round(c.accuracy), t: pos.timestamp || Date.now() };
+    const last = fs.pts[fs.pts.length - 1];
+    let heading = isFinite(c.heading) && c.speed > 1 ? c.heading : null;
+    if (last) {
+      const d = distM(last, pt);
+      const dt = Math.max(1, (pt.t - last.t) / 1000);
+      if (d / dt > st.maxSpeed) { fs.jumps++; fs.bad.push({ lat: pt.lat, lng: pt.lng, why: 'jump' }); fsUpdateUI(); return; }              // قفزة غير طبيعية
+      // الاتجاه من حركة حقيقية فقط؛ اهتزاز GPS أثناء الوقوف لا يغيّر اتجاه الرمز
+      if (heading === null && d >= st.minStep) heading = bearing(last, pt);
+      if (heading !== null) fs.lastHeading = heading;
+      fsUpdateMe(pt.lat, pt.lng, c.accuracy, fs.lastHeading);
+      if (d < st.minStep) { fsUpdateUI(); return; }                                // نقطة قريبة جداً (اهتزاز)
+      fs.dist += d;
+    } else {
+      if (heading !== null) fs.lastHeading = heading;
+      fsUpdateMe(pt.lat, pt.lng, c.accuracy, fs.lastHeading);
+      if (map.getZoom() < 15) map.setView([pt.lat, pt.lng], fs.type === 'car' ? 16 : 18);   // من عرض الدولة كاملة
+      else map.panTo([pt.lat, pt.lng]);                                                     // تمركز فقط بدون أي دوران
+    }
+    fs.pts.push(pt);
+    fsLine.addLatLng([pt.lat, pt.lng]);
+    if (fs.pts.length === 1) { fsDrawStart(); fsToast('🏁 تم حفظ نقطة البداية. تحرّك على حدود المكان وارجع إليها.', 5000); }
+    if (!map.getBounds().pad(-0.15).contains([pt.lat, pt.lng])) map.panTo([pt.lat, pt.lng]);
+
+    // تنبيه 90%
+    const T = fs.target * 1000;
+    if (T > 0 && !fs.alert90 && fs.dist >= 0.9 * T) {
+      fs.alert90 = true;
+      fsToast('اقتربت من إكمال المحيط، عُد إلى نقطة البداية لإغلاق الشكل.');
+    }
+    // الاقتراب من نقطة البداية (لا يُغلق تلقائياً)
+    const fromStart = distM(pt, fs.pts[0]);
+    if (fromStart > fs.closeR * 2) { fs.leftStart = true; fs.nearShown = false; }
+    if (fs.leftStart && !fs.nearShown && fs.pts.length >= 3 && fromStart <= fs.closeR) {
+      fs.nearShown = true;
+      fsEl('fsNear').classList.add('show');
+      if (navigator.vibrate) navigator.vibrate([300, 150, 300]);
+    }
+    fsSave();
+    fsUpdateUI();
+  }
+  function fsOnErr(err) { fsEl('fsInfo').textContent = 'تعذّر الحصول على الموقع: ' + err.message + ' — فعّل GPS واسمح للمتصفح بالوصول.'; }
+
+  async function fsWatch(on) {
+    if (on) {
+      if (watchId !== null) { stopTrack(); statusEl.textContent = 'أوقفتُ تتبع المشي العادي لأن المحيط الميداني يستخدم GPS الآن.'; }
+      fs.watch = navigator.geolocation.watchPosition(fsOnPos, fsOnErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+      try { if ('wakeLock' in navigator) fsWake = await navigator.wakeLock.request('screen'); } catch (e) {}
+    } else {
+      if (fs.watch !== null) navigator.geolocation.clearWatch(fs.watch);
+      fs.watch = null;
+      try { if (fsWake) fsWake.release(); } catch (e) {}
+      fsWake = null;
+    }
+  }
+  document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && fs.state === 'tracking') { try { fsWake = await navigator.wakeLock.request('screen'); } catch (e) {} }
+  });
+
+  function fsReadSettings() {
+    fs.target = parseKm(fsEl('fsTarget').value) || 0;
+    const a = parseFloat(fsEl('fsAcc').value), r = parseFloat(fsEl('fsCloseR').value);
+    fs.accLimit = isFinite(a) && a > 0 ? a : 20;
+    fs.closeR = isFinite(r) && r > 0 ? r : 20;
+  }
+
+  fsEl('fsStart').onclick = () => fsBegin();
+  // بدء تسجيل مسار جديد (يستخدمه زر «بدء التتبع» وزر مسح النظافة)
+  async function fsBegin(opt = {}) {
+    if (!navigator.geolocation) return fsToast('المتصفح لا يدعم تحديد الموقع.');
+    fsReadSettings();
+    if (fs.pts.length && !confirm('سيُمسح المسار الحالي ونتيجته، ويبدأ تسجيل مسار جديد من موقعك الآن.\nهل تريد المتابعة؟')) return;
+    if (fsMe) { map.removeLayer(fsMe); fsMe = null; }
+    if (fsAccCircle) { map.removeLayer(fsAccCircle); fsAccCircle = null; }
+    fsEl('fsNear').classList.remove('show');
+    if (!fs.target && !opt.noTargetAsk && !confirm('لم تُدخل طول المحيط المستهدف.\nتريد البدء بدونه؟ (لن تظهر المسافة المتبقية ونسبة الإنجاز)')) return;
+    Object.assign(fs, { pts: [], bad: [], dist: 0, rejected: 0, jumps: 0, alert90: false, leftStart: false, nearShown: false, result: null, state: 'tracking' });
+    arClearRoute('field');   // مسار جديد = مضلع قديم يُحذف
+    fsRedrawPath();
+    await fsWatch(true);
+    fsSave(); fsUpdateUI();
+  }
+  fsEl('fsPause').onclick = () => { fs.state = 'paused'; fsWatch(false); fsSave(); fsUpdateUI(); };
+  fsEl('fsResume').onclick = () => { fsReadSettings(); fs.state = 'tracking'; fsWatch(true); fsUpdateUI(); };
+
+  function fsCloseShape(force) {
+    if (fs.pts.length < 3) return fsToast('تحتاج 3 نقاط على الأقل لإغلاق الشكل.');
+    const gap = distM(fs.pts[fs.pts.length - 1], fs.pts[0]);
+    if (!force && gap > fs.closeR &&
+      !confirm(`أنت تبعد ${fmtLenC(gap)} عن نقطة البداية.\nالإغلاق الآن سيصل آخر نقطة بالبداية بخط مستقيم وقد تكون المساحة غير دقيقة.\nهل تريد الإغلاق؟`)) return;
+    fsEl('fsNear').classList.remove('show');
+    fsWatch(false);
+    fs.state = 'closed';
+    const a = fsArea(fs.pts);
+    fs.result = { area: a.area, by: a.by, perim: fs.dist + gap, target: fs.target * 1000, type: fs.type, n: fs.pts.length, at: new Date().toLocaleString('ar-SA') };
+    fsRedrawPath();
+    if (fsPoly) map.fitBounds(fsPoly.getBounds(), { padding: [24, 24] });
+    fsSave(); fsUpdateUI();
+    fsToast(`✅ تم إغلاق الشكل — المساحة: ${Math.round(a.area).toLocaleString('en')} م²`, 6000);
+    fsEl('fsResult').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  fsEl('fsCloseShape').onclick = () => fsCloseShape(false);
+  fsEl('fsNearClose').onclick = () => fsCloseShape(true);
+  fsEl('fsNearLater').onclick = () => fsEl('fsNear').classList.remove('show');
+
+  fsEl('fsUndo').onclick = () => {
+    if (!fs.pts.length) return;
+    if (fs.state === 'closed') { fs.state = 'paused'; fs.result = null; }   // التراجع بعد الإغلاق يعيد فتح الشكل
+    fs.pts.pop();
+    fsRecalcDist();
+    if (!fs.pts.length) fs.state = fs.watch !== null ? 'tracking' : 'idle';
+    if (fs.target && fs.dist < 0.9 * fs.target * 1000) fs.alert90 = false;
+    fsRedrawPath(); fsSave(); fsUpdateUI();
+  };
+  fsEl('fsClear').onclick = () => {
+    if (!confirm('مسح مسار المحيط الميداني ونتيجته نهائياً؟')) return;
+    fsWatch(false);
+    Object.assign(fs, { pts: [], bad: [], dist: 0, rejected: 0, jumps: 0, alert90: false, leftStart: false, nearShown: false, result: null, state: 'idle', lastAcc: null });
+    if (fsMe) { map.removeLayer(fsMe); fsMe = null; }
+    if (fsAccCircle) { map.removeLayer(fsAccCircle); fsAccCircle = null; }
+    fsEl('fsNear').classList.remove('show');
+    fsRedrawPath(); fsSave(); fsUpdateUI();
+    arClearRoute('field');   // يمسح المضلع الناتج عن هذا المسار أيضاً
+  };
+
+  // حفظ النتيجة كملف CSV يفتح في Excel
+  fsEl('fsSave').onclick = () => {
+    fsSave();
+    const r = fs.result, T = fs.target * 1000;
+    const rows = [['رسم محيط ميداني وحساب المساحة'], ['التاريخ', new Date().toLocaleString('ar-SA')], ['نوع الحركة', FS_STYLE[fs.type].label],
+      ['المحيط المستهدف (م)', T ? T.toFixed(1) : ''], ['المسافة المقطوعة (م)', fs.dist.toFixed(1)]];
+    if (r) rows.push(['المحيط الفعلي (م)', r.perim.toFixed(1)], ['الفرق (م)', T ? (r.perim - T).toFixed(1) : ''],
+      ['المساحة (م²)', r.area.toFixed(1)], ['المساحة (كم²)', (r.area / 1e6).toFixed(6)], ['المساحة (هكتار)', (r.area / 1e4).toFixed(4)]);
+    else rows.push(['الحالة', 'الشكل لم يُغلق بعد']);
+    rows.push([], ['#', 'خط العرض', 'خط الطول', 'الدقة (م)', 'الوقت']);
+    fs.pts.forEach((p, i) => rows.push([i + 1, p.lat.toFixed(7), p.lng.toFixed(7), p.acc, new Date(p.t).toLocaleString('ar-SA')]));
+    const csv = '﻿' + rows.map(r2 => r2.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    a.download = 'محيط_ميداني.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    fsToast('💾 تم حفظ النتيجة في الجهاز، وهي محفوظة أيضاً داخل الصفحة.', 4000);
+  };
+  fsEl('fsPdf').onclick = () => pdfBtn.onclick();
+
+  document.querySelectorAll('#fsType button').forEach(b => b.onclick = () => {
+    fs.type = b.dataset.t; setSetting('pm_fs_type', fs.type);
+    fsRedrawPath(); if (fs.result) fs.result.type = fs.type;
+    fsSave(); fsUpdateUI();
+  });
+  ['fsTarget', 'fsAcc', 'fsCloseR'].forEach(id => fsEl(id).addEventListener('input', () => {
+    fsReadSettings(); setSetting('pm_' + id, fsEl(id).value);
+    if (fs.target && fs.dist < 0.9 * fs.target * 1000) fs.alert90 = false;
+    if (fs.result) fs.result.target = fs.target * 1000;
+    fsDrawStart(); fsSave(); fsUpdateUI();
+  }));
+  document.getElementById('northBtn').onclick = () => { resetNorth(); statusEl.textContent = '🧭 الخريطة موجّهة للشمال (0°).'; };
+  fsEl('fieldBtn').onclick = () => fsEl('fieldCard').classList.toggle('open');
+  fsEl('fsCloseCard').onclick = () => fsEl('fieldCard').classList.remove('open');
+
+  async function fsRestore() {
+    const d = await DB.load('field', null);
+    fsEl('fsTarget').value = getSetting('pm_fsTarget', '');
+    fsEl('fsAcc').value = getSetting('pm_fsAcc', '20');
+    fsEl('fsCloseR').value = getSetting('pm_fsCloseR', '20');
+    fs.type = getSetting('pm_fs_type', 'walk');
+    fsReadSettings();
+    if (d && Array.isArray(d.pts)) {
+      Object.assign(fs, { pts: d.pts, bad: Array.isArray(d.bad) ? d.bad : [], dist: d.dist || 0, rejected: d.rejected || 0, jumps: d.jumps || 0, alert90: !!d.alert90, result: d.result || null, type: d.type || fs.type });
+      fs.state = d.pts.length ? (d.state === 'closed' ? 'closed' : 'paused') : 'idle';
+      fsRecalcDist();
+      if (fs.pts.length) fsEl('fieldCard').classList.add('open');
+    }
+    fsRedrawPath(); fsUpdateUI();
+  }
+
+  // ======================================================================
+  // ===== المساحة والنسبة اعتماداً على المسافة المقطوعة =====
+  // ======================================================================
+  const arEl = id => document.getElementById(id);
+  const fmtAreaAR = a => Math.round(a).toLocaleString('en') + ' م²' +
+    (a > 1e6 ? ` (${(a / 1e6).toLocaleString('en', { maximumFractionDigits: 3 })} كم²)` : '');
+  const fmtPct = p => (p < 10 ? Math.round(p * 100) / 100 : Math.round(p * 10) / 10) + '%';
+  let pdShown = getSetting('pm_pd', '') === '1';          // هل ضغط المستخدم بطاقة «أنت قطعت»
+  let selSeq = +getSetting('pm_selseq', '0') || 0;        // عدّاد ترتيب تحديد الصور
+  const pdCloseOn = () => getSetting('pm_pdclose', '0') === '1';
+
+  // مصدر المسار: المحيط الميداني أو تتبع المشي (الذي يعمل الآن، وإلا الذي فيه نقاط)
+  function arSource() {
+    let kind = null;
+    if (fs.state === 'tracking') kind = 'field';
+    else if (watchId !== null) kind = 'walk';
+    else if (fs.pts.length) kind = 'field';
+    else if (track.length) kind = 'walk';
+    if (!kind) return null;
+    return kind === 'field'
+      ? { kind, pts: fs.pts, dist: fs.dist, closed: fs.state === 'closed', label: 'المحيط الميداني' }
+      : { kind, pts: track, dist: walkedDist(), closed: false, label: 'تتبع المشي' };
+  }
+
+  // الصور المحددة بترتيب تحديدها (الصور المحددة افتراضياً بترتيب حروفها، وما يُحدَّد لاحقاً يأتي بعدها)
+  function selectedPhotos() {
+    return points.map((p, i) => ({ p, i }))
+      .filter(o => o.p.inArea !== false)
+      .sort((a, b) => (a.p.selOrder ?? a.i) - (b.p.selOrder ?? b.i))
+      .map(o => o.p);
+  }
+
+  // مجموع الخطوط الزرقاء بين الصور: A→B + B→C + C→D (+ آخر صورة→أول صورة إذا فُعّل خط الإغلاق)
+  function photoDist() {
+    const sel = selectedPhotos(), close = pdCloseOn() && sel.length >= 3;
+    const segs = [];
+    for (let i = 0; i < sel.length - 1; i++) segs.push({ from: sel[i].name, to: sel[i + 1].name, d: distM(sel[i], sel[i + 1]) });
+    if (close) segs.push({ from: sel[sel.length - 1].name, to: sel[0].name, d: distM(sel[sel.length - 1], sel[0]) });
+    return { sel, segs, close, sum: segs.reduce((a, x) => a + x.d, 0) };   // بالمتر
+  }
+
+  // مسافة بالمتر/الكيلومتر بدون أصفار زائدة: 10 كم، 1.15 كم، 47.1 م
+  const fmtNice = m => m >= 1000 ? (Math.round(m / 10) / 100) + ' كم' : (Math.round(m * 10) / 10) + ' م';
+  const photoCountAr = n => n === 1 ? 'صورة واحدة' : n === 2 ? 'صورتان' : n >= 3 && n <= 10 ? n + ' صور' : n + ' صورة';
+
+  // مجموع عمود «المسافة بينهما» للصور التي حُددت لها إحداثية بديلة فقط
+  // (الصفوف التي فيها — لا تدخل في المجموع ولا في العدد)
+  function pairColumn() {
+    const rows = points.filter(p => p.pick).map(p => ({ name: p.name, d: pairDist(p) }));   // Haversine بين الصورة وإحداثيتها المحددة فقط
+    const sum = Math.round(rows.reduce((a, x) => a + x.d, 0) * 10) / 10;
+    return { rows, n: rows.length, sum };
+  }
+
+  // نسبة مسافات الصور = مجموع عمود «المسافة بينهما» ÷ المسافة المقطوعة فعلياً × 100 (كلاهما بالمتر)
+  function photoDistRatio() {
+    const s = arSource(), route = s ? s.dist : 0, pc = pairColumn();
+    const target = fs.target > 0 ? fs.target * 1000 : 0;
+    const base = { route, pc, s, target };
+    if (!(route > 0)) return { ...base, ok: false, text: 'ابدأ تتبع الرحلة أولًا لحساب النسبة' };
+    if (!pc.n) return { ...base, ok: false, text: 'حدّد إحداثية بديلة لصورة واحدة على الأقل' };
+    const pct = pc.sum / route * 100;
+    return { ...base, ok: true, pct, text: pct.toFixed(2) + '%' };
+  }
+  // نسبة إنجاز الرحلة = المقطوع فعلياً ÷ المستهدف × 100
+  function tripProgress() {
+    const s = arSource(), route = s ? s.dist : 0, target = fs.target > 0 ? fs.target * 1000 : 0;
+    if (!target) return { ok: false, route, target, text: 'أدخل المسافة المستهدفة' };
+    const pct = route / target * 100;
+    return { ok: true, route, target, pct, left: target - route, text: (Math.round(pct * 10) / 10) + '%' };
+  }
+
+  // ===== طريقة حساب النسبة: بالمسافة (الافتراضية والأدق) أو بعدد نقاط GPS (اختيارية) =====
+  let calcMethod = getSetting('pm_calc', 'dist') === 'points' ? 'points' : 'dist';
+  let gpsTol = parseFloat(getSetting('pm_tol', '20')) || 20;      // مسافة السماحية بالمتر
+  let gpsDotsOn = getSetting('pm_dots', '0') === '1';
+  const gpsDotsLayer = L.layerGroup().addTo(map);
+  const gpsRenderer = L.canvas({ padding: 0.3 });                 // رسم خفيف على الجوال
+
+  // خطوط الصور: من إحداثية الصورة إلى إحداثيتها المحددة (A→A′، B→B′ …)
+  const photoLines = () => points.filter(p => p.pick).map(p => ({ name: p.name, a: { lat: p.lat, lng: p.lng }, b: p.pick }));
+
+  // أقصر مسافة (م) بين نقطة GPS وخط صورة — turf.pointToLineDistance، وإن لم يُحمَّل Turf نستخدم إسقاطاً محلياً
+  function distToLineM(pt, a, b) {
+    if (window.turf && turf.pointToLineDistance && (a.lat !== b.lat || a.lng !== b.lng)) {
+      try {
+        const d = turf.pointToLineDistance(turf.point([pt.lng, pt.lat]), turf.lineString([[a.lng, a.lat], [b.lng, b.lat]]), { units: 'meters' });
+        if (isFinite(d)) return d;
+      } catch (e) {}
+    }
+    const R = 6371008.8, k = Math.PI / 180, c = Math.cos(pt.lat * k);
+    const X = q => [(q.lng - pt.lng) * k * R * c, (q.lat - pt.lat) * k * R];
+    const [ax, ay] = X(a), [bx, by] = X(b), dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+    const t = L2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+    return Math.hypot(ax + t * dx, ay + t * dy);
+  }
+
+  // نسبة نقاط GPS = النقاط المطابقة لخطوط الصور ÷ إجمالي النقاط المقبولة × 100
+  function gpsPointsRatio() {
+    const s = arSource(), pts = s ? s.pts : [], lines = photoLines();
+    const field = s && s.kind === 'field';
+    const excAcc = s ? (field ? fs.rejected : rejected) : 0, excJump = field ? fs.jumps : 0;
+    const bad = s ? (field ? fs.bad : trackBad) : [];
+    // النقطة تُحسب مرة واحدة فقط حتى لو كانت قريبة من أكثر من خط
+    const flags = pts.map(p => lines.some(l => distToLineM(p, l.a, l.b) <= gpsTol));
+    const matched = flags.reduce((n, f) => n + (f ? 1 : 0), 0);
+    const base = { s, route: s ? s.dist : 0, total: pts.length, matched, unmatched: pts.length - matched,
+      excAcc, excJump, excluded: excAcc + excJump, flags, bad, lines, tol: gpsTol };
+    if (!pts.length) return { ...base, ok: false, text: 'ابدأ تتبع الرحلة أولًا لحساب النسبة' };
+    if (!lines.length) return { ...base, ok: false, text: 'حدّد إحداثية بديلة لصورة واحدة على الأقل لإنشاء خطوط الصور' };
+    const pct = matched / pts.length * 100;
+    return { ...base, ok: true, pct, text: pct.toFixed(2) + '%' };
+  }
+
+  // نقاط GPS على الخريطة: أخضر مطابق، رمادي غير مطابق، أحمر مستبعد
+  let dotsTimer = null;
+  function drawGpsDots() {
+    gpsDotsLayer.clearLayers();
+    if (!gpsDotsOn) return;
+    const r = gpsPointsRatio();
+    if (!r.s) return;
+    const dot = (p, color) => L.circleMarker([p.lat, p.lng], { renderer: gpsRenderer, radius: 4, weight: 1, color: '#fff', fillColor: color, fillOpacity: 1, interactive: false }).addTo(gpsDotsLayer);
+    r.s.pts.forEach((p, i) => dot(p, r.flags[i] ? '#2e7d32' : '#9e9e9e'));
+    r.bad.forEach(p => dot(p, '#d32f2f'));
+  }
+  const scheduleDots = () => { if (!gpsDotsOn) return; clearTimeout(dotsTimer); dotsTimer = setTimeout(drawGpsDots, 400); };
+
+  function updateCalcUI() {
+    document.querySelectorAll('input[name="calcM"]').forEach(r => r.checked = r.value === calcMethod);
+    arEl('calcPointsOpts').hidden = calcMethod !== 'points';
+    arEl('gpsTol').value = gpsTol;
+    arEl('dotsBtn').textContent = gpsDotsOn ? '🙈 إخفاء نقاط GPS' : '📍 إظهار نقاط GPS';
+    arEl('gpsStatBox').hidden = calcMethod !== 'points';
+  }
+
+  function arUpdateCard() {
+    const s = arSource(), card = arEl('arCard');
+    const show = !!s && (s.pts.length > 0 || fs.state === 'tracking' || watchId !== null);
+    card.classList.toggle('show', show);
+    document.body.classList.toggle('has-ar', show);
+    if (s) arEl('arDist').textContent = fmtLenC(s.dist);
+    // تحديث نسبة مسافات الصور مباشرة مع كل نقطة GPS
+    const sp = arEl('sPdPct');
+    if (sp) { const r = photoDistRatio(); sp.textContent = r.text; sp.classList.toggle('msg', !r.ok); }
+    const sg = arEl('sGpsPct');
+    if (sg && calcMethod === 'points') { const g = gpsPointsRatio(); sg.textContent = g.text; sg.classList.toggle('msg', !g.ok); }
+    scheduleDots();
+    svSchedule();
+    if (pdShown && !arEl('arConfirm').classList.contains('show')) arRender();
+  }
+
+  // إيقاف التسجيل مؤقتاً، ويُرجع هل كان يعمل
+  function arPause(kind) {
+    if (kind === 'field' && fs.state === 'tracking') { fs.state = 'paused'; fsWatch(false); fsSave(); fsUpdateUI(); return true; }
+    if (kind === 'walk' && watchId !== null) { stopTrack(); return true; }
+    return false;
+  }
+  function arResume(kind) {
+    if (kind === 'field') { fs.state = 'tracking'; fsWatch(true); fsUpdateUI(); }
+    else startTrack();
+  }
+  function arRemovePreview() { if (arPreviewLine) { map.removeLayer(arPreviewLine); arPreviewLine = null; } }
+
+  // بدء إغلاق المسار لحساب المساحة (معاينة خط الإغلاق ثم السؤال)
+  function arAskClose() {
+    const s = arSource();
+    if (!s || s.pts.length < 3) { fsToast('لا توجد نقاط مسار كافية لحساب المساحة.', 5000); return; }
+    const wasTracking = arPause(s.kind);
+    if (s.closed) { arCompute(arSource()); return; }       // المسار مغلق مسبقاً
+    const a = s.pts[s.pts.length - 1], b = s.pts[0];
+    arRemovePreview();
+    arPreviewLine = L.polyline([[a.lat, a.lng], [b.lat, b.lng]], { color: '#d50000', weight: 5, dashArray: '10 8' }).addTo(map);
+    map.fitBounds(L.latLngBounds(s.pts.map(p => [p.lat, p.lng])).pad(0.15));
+    arEl('arGap').textContent = fmtLenC(distM(a, b));
+    arPending = { kind: s.kind, wasTracking };
+    arEl('arConfirm').classList.add('show');
+  }
+
+  arEl('arCard').onclick = () => {
+    // 1) نسبة مسافات الصور: تُحسب وتظهر مباشرة بدون إغلاق المسار
+    pdShown = true; setSetting('pm_pd', '1');
+    arRefresh(true);
+    arEl('arResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    // 2) نسبة المساحات: تحتاج إغلاق المسار، فنعرض معاينة خط الإغلاق ونسأل
+    const s = arSource();
+    if (s && s.pts.length >= 3) arAskClose();
+  };
+  arEl('arYes').onclick = () => {
+    arEl('arConfirm').classList.remove('show');
+    arRemovePreview();
+    const s = arSource();
+    if (s) arCompute(s);
+    arPending = null;
+  };
+  arEl('arNo').onclick = () => {
+    arEl('arConfirm').classList.remove('show');
+    arRemovePreview();
+    if (arPending && arPending.wasTracking) arResume(arPending.kind);
+    arPending = null;
+    arUpdateCard();
+  };
+
+  // مساحة نقاط الصور المحددة (بترتيب التحديد، مع إغلاق آخر صورة بأول صورة)
+  function arImages() {
+    const sel = selectedPhotos();
+    if (sel.length < 3) return { n: sel.length, area: null, perim: null, names: sel.map(p => p.name) };
+    const a = fsArea(sel);   // turf.polygon([[lng, lat], ...]) ثم turf.area
+    let per = 0;
+    for (let i = 0; i < sel.length; i++) per += distM(sel[i], sel[(i + 1) % sel.length]);
+    return { n: sel.length, area: a.area, by: a.by, perim: per, coords: sel.map(p => [p.lat, p.lng]), names: sel.map(p => p.name) };
+  }
+
+  function arCompute(s) {
+    const pts = s.pts.map(p => ({ lat: p.lat, lng: p.lng }));
+    if (pts.length < 3) { fsToast('لا توجد نقاط مسار كافية لحساب المساحة.', 5000); return; }
+    const r = fsArea(pts);   // المساحة من شكل وإحداثيات المسار، وليس من الرقم وحده
+    const gap = distM(pts[pts.length - 1], pts[0]);
+    ar = { kind: s.kind, label: s.label, pts, dist: s.dist, routePerim: s.dist + gap, routeArea: r.area, by: r.by, at: new Date().toLocaleString('ar-SA') };
+    pdShown = true; setSetting('pm_pd', '1');
+    arRecalcImages(true);
+    arEl('arResult').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // يُعاد حساب كل شيء فور تغيير الصور المحددة
+  function arRefresh(fit) {
+    scheduleDots();
+    if (ar) { arRecalcImages(fit); return; }
+    arDraw(fit); arRender(); updateSummary(); arUpdateCard();
+  }
+  function arRecalcImages(fit) {
+    if (!ar) { arRefresh(fit); return; }
+    const im = arImages();
+    ar.img = im;
+    if (im.area === null) { ar.pct = null; ar.err = `يلزم تحديد 3 صور على الأقل لحساب مساحة المضلع بين مواقع الصور (المحدد الآن: ${im.n}). حدّدها من مربع «مساحة» في الجدول.`; }
+    else if (!(Math.round(ar.routeArea) > 0)) { ar.pct = null; ar.err = 'المساحة الإجمالية للمسار تساوي صفرًا — لا يمكن حساب النسبة. تحرّك في مسار يحيط بمساحة ثم أعد المحاولة.'; }
+    else { ar.pct = Math.round(im.area) / Math.round(ar.routeArea) * 100; ar.err = null; }   // مساحة مضلع الصور ÷ مساحة مضلع مسار GPS × 100
+    DB.save(ar, 'ar');
+    arDraw(fit);
+    arRender();
+    updateSummary();
+  }
+
+  function arDraw(fit) {
+    arLayers.forEach(l => map.removeLayer(l)); arLayers = [];
+    const pd = photoDist();
+    const sc = pd.sel.map(p => [p.lat, p.lng]);
+    if (ar) {
+      const rp = ar.pts.map(p => [p.lat, p.lng]);
+      // مسار المستخدم: حد أخضر عريض وتعبئة خضراء شفافة
+      arLayers.push(L.polygon(rp, { color: '#2e7d32', weight: 8, fillColor: '#43a047', fillOpacity: 0.2, lineJoin: 'round' }).addTo(map));
+      // شكل الصور المحددة: حد أزرق وتعبئة زرقاء شفافة
+      if (ar.img && ar.img.coords) arLayers.push(L.polygon(ar.img.coords, { color: '#1565c0', weight: 4, fillColor: '#1e88e5', fillOpacity: 0.28 }).addTo(map));
+      const st = rp[0], en = rp[rp.length - 1];
+      arLayers.push(L.marker(st, { zIndexOffset: 1600, icon: L.divIcon({ className: '', iconSize: [70, 24], iconAnchor: [35, 34], html: '<div class="fs-start">🏁 البداية</div>' }) }).addTo(map));
+      arLayers.push(L.marker(en, { zIndexOffset: 1600, icon: L.divIcon({ className: '', iconSize: [70, 24], iconAnchor: [35, -10], html: '<div class="ar-end">🔚 النهاية</div>' }) }).addTo(map));
+    }
+    if (fit) {
+      const all = (ar ? ar.pts.map(p => [p.lat, p.lng]) : []).concat(sc);
+      if (all.length >= 2) map.fitBounds(L.latLngBounds(all).pad(0.12));
+    }
+  }
+
+  function arRender() {
+    const box = arEl('arResult');
+    if (!ar && !pdShown) { box.classList.remove('show'); box.innerHTML = ''; arEl('calcBox').hidden = true; return; }
+    const r = photoDistRatio(), pc = r.pc, tp = tripProgress();
+    const rowsTxt = pc.rows.map(x => `${x.name}↔${x.name}′ ${x.d.toFixed(1)}`).join(' + ');
+    const im = ar && ar.img || {};
+    box.innerHTML = `
+      <h3><span>📐 نتائج الرحلة${r.s ? ' (' + r.s.label + ')' : ''}</span><button id="arHide">إخفاء</button></h3>
+      <div class="ar-trip">${tp.ok ? `قطعت ${fmtNice(tp.route)} من أصل ${fmtNice(tp.target)} — نسبة الإنجاز ${tp.text}` : `قطعت ${fmtNice(r.route)} — ${tp.text} في «محيط ميداني» لحساب نسبة الإنجاز`}</div>
+      <table>
+        <tr><td>المسافة المستهدفة</td><td>${tp.target ? fmtNice(tp.target) : '—'}</td></tr>
+        <tr><td>المسافة المقطوعة فعليًا</td><td>${fmtNice(r.route)}</td></tr>
+        <tr><td>المتبقي من الهدف</td><td>${tp.ok ? (tp.left >= 0 ? fmtNice(tp.left) : 'تجاوزت الهدف بـ ' + fmtNice(-tp.left)) : '—'}</td></tr>
+        <tr><td>نسبة إنجاز الرحلة</td><td>${tp.text}</td></tr>
+      </table>
+      ${calcMethod === 'dist' ? `
+      <h3 style="margin-top:12px"><span>📏 نسبة المسافات (الحساب بالمسافة)</span></h3>
+      <table>
+        <tr><td>طريقة الحساب المختارة</td><td>الحساب بالمسافة</td></tr>
+        <tr><td>عدد الصور المحددة</td><td>${pc.n ? photoCountAr(pc.n) : '—'}</td></tr>
+        <tr><td>مجموع عمود «المسافة بينهما»</td><td>${pc.n ? pc.sum.toFixed(1) + ' م' : '—'}</td></tr>
+        ${rowsTxt ? `<tr><td colspan="2" style="font-weight:normal;font-size:12px;color:#556"><span dir="ltr">${rowsTxt}</span> م — هذا مجموع مسافات فقط، ولا يُستخدم لحساب أي مساحة.</td></tr>` : ''}
+      </table>
+      <div class="ar-big">
+        <div class="dist" style="grid-column:1 / -1"><small>نسبة مسافات الصور من المسافة المقطوعة</small><b class="${r.ok ? '' : 'msg'}">${r.text}</b>
+          ${r.ok ? `<div style="font-size:12px;margin-top:2px">${pc.sum.toFixed(1)} م ÷ ${Math.round(r.route * 10) / 10} م × 100</div>` : ''}</div>
+      </div>` : (() => { const g = gpsPointsRatio(); return `
+      <h3 style="margin-top:12px"><span>📍 نسبة نقاط GPS (الحساب بعدد النقاط)</span></h3>
+      <table>
+        <tr><td>طريقة الحساب المختارة</td><td>الحساب بعدد نقاط GPS</td></tr>
+        <tr><td>المسافة المقطوعة</td><td>${fmtNice(g.route)}</td></tr>
+        <tr><td>إجمالي نقاط GPS المقبولة</td><td>${g.total.toLocaleString('en')} نقطة</td></tr>
+        <tr><td>نقاط GPS المطابقة لخطوط الصور</td><td style="color:#2e7d32">${g.matched.toLocaleString('en')} نقطة</td></tr>
+        <tr><td>نقاط GPS غير المطابقة</td><td style="color:#616161">${g.unmatched.toLocaleString('en')} نقطة</td></tr>
+        <tr><td>النقاط المستبعدة</td><td style="color:#c62828">${g.excluded} (ضعف الدقة: ${g.excAcc} — قفزات: ${g.excJump})</td></tr>
+        <tr><td>خطوط الصور المستخدمة</td><td><span dir="ltr">${g.lines.length ? g.lines.map(l => l.name + '→' + l.name + '′').join('، ') : '—'}</span></td></tr>
+        <tr><td>مسافة السماحية</td><td>${g.tol} م</td></tr>
+      </table>
+      <div class="ar-big">
+        <div class="pts" style="grid-column:1 / -1"><small>نسبة نقاط GPS المطابقة من إجمالي النقاط المقبولة</small><b class="${g.ok ? '' : 'msg'}">${g.text}</b>
+          ${g.ok ? `<div style="font-size:12px;margin-top:2px">${g.matched} ÷ ${g.total} × 100 = ${g.text}</div>` : ''}</div>
+      </div>
+      <div class="ar-warn">⚠️ الحساب بالنقاط يتأثر بعدد مرات تسجيل GPS؛ لذلك يجب استخدام فترة تسجيل موحدة للحصول على مقارنة عادلة.</div>`; })()}
+      <h3 style="margin-top:14px"><span>🟩 نسبة المساحات</span></h3>
+      ${ar ? `
+      <table>
+        <tr><td>المسافة عند الإغلاق</td><td>${fmtLenC(ar.dist)}</td></tr>
+        <tr><td>محيط المسار بعد الإغلاق</td><td>${fmtLenC(ar.routePerim)}</td></tr>
+        <tr><td>المساحة الإجمالية للمسار</td><td>${fmtAreaAR(ar.routeArea)}</td></tr>
+        <tr><td>عدد الصور المحددة للمضلع</td><td>${im.n || 0}</td></tr>
+        <tr><td>محيط نقاط الصور</td><td>${im.perim != null ? fmtLenC(im.perim) : '—'}</td></tr>
+        <tr><td>مساحة المضلع بين مواقع الصور الأصلية</td><td>${im.area != null ? fmtAreaAR(im.area) : '—'}</td></tr>
+        ${im.area != null ? `<tr><td colspan="2" style="font-weight:normal;font-size:12px;color:#556;line-height:1.7">هذه المساحة محسوبة من إحداثيات الصور الأصلية المحددة: <span dir="ltr"><b>${im.names.join('→')}→${im.names[0]}</b></span>، وليست من عمود المسافة بينهما.</td></tr>` : ''}
+      </table>
+      <div class="ar-big"><div class="area" style="grid-column:1 / -1"><small>نسبة المساحات (مضلع الصور ÷ مضلع مسار GPS)</small><b class="${ar.pct == null ? 'msg' : ''}">${ar.pct != null ? fmtPct(ar.pct) : ar.err}</b>
+        ${ar.pct != null ? `<div style="font-size:12.5px;margin-top:2px">${Math.round(im.area).toLocaleString('en')} م² ÷ ${Math.round(ar.routeArea).toLocaleString('en')} م² × 100 = ${fmtPct(ar.pct)}</div>` : ''}</div></div>
+      <div class="ar-note">مساحة المسار محسوبة من ${ar.pts.length} نقطة GPS بعد توصيل آخر نقطة بأول نقطة وإغلاق المضلع. مساحة الصور محسوبة من مضلع مواقع الصور الأصلية المغلق. كلتاهما بـ ${ar.by} (turf.area على إحداثيات [خط الطول، خط العرض] مع إغلاق الحلقة). — ${ar.at}</div>`
+      : `<div class="ar-note">نسبة المساحات تحتاج إغلاق المسار (توصيل موقعك بنقطة البداية).</div>
+         <button id="arCloseBtn" style="width:100%;margin-top:6px;background:#2e7d32;color:#fff">🔒 إغلاق المسار وحساب نسبة المساحات</button>`}
+      <div class="ar-note">نسبة مسافات الصور = مجموع عمود «المسافة بينهما» للصور التي حُددت لها إحداثية بديلة ÷ المسافة المقطوعة فعليًا × 100. لا تحتاج إغلاق المسار، ولا تستخدم الخطوط بين الصور.
+        نسبة إنجاز الرحلة = المقطوع فعليًا ÷ المستهدف × 100.</div>`;
+    box.classList.add('show');
+    arEl('calcBox').hidden = false;
+    arEl('arHide').onclick = () => { ar = null; pdShown = false; setSetting('pm_pd', ''); DB.save(null, 'ar'); arRefresh(); };
+    const cb = arEl('arCloseBtn'); if (cb) cb.onclick = arAskClose;
+  }
+
+  document.querySelectorAll('input[name="calcM"]').forEach(r => r.onchange = () => {
+    calcMethod = r.value; setSetting('pm_calc', calcMethod);
+    updateCalcUI(); arRender(); updateSummary(); scheduleDots();
+  });
+  arEl('gpsTol').addEventListener('input', () => {
+    const v = parseFloat(arEl('gpsTol').value);
+    if (!(v > 0)) return;
+    gpsTol = v; setSetting('pm_tol', String(v));
+    arRender(); updateSummary(); scheduleDots();
+  });
+  arEl('dotsBtn').onclick = () => {
+    gpsDotsOn = !gpsDotsOn; setSetting('pm_dots', gpsDotsOn ? '1' : '0');
+    updateCalcUI(); drawGpsDots();
+  };
+  updateCalcUI();
+
+  // مسح نتيجة المسار المغلق (المضلع الأخضر وعلامتي البداية والنهاية) عند مسح المسار أو بدء مسار جديد
+  function arClearRoute(kind) {
+    if (ar && (!kind || ar.kind === kind)) { ar = null; DB.save(null, 'ar'); }
+    arRemovePreview();
+    arEl('arConfirm').classList.remove('show');
+    arRefresh(false);
+    drawGpsDots();
+  }
+
+  async function arRestore() {
+    const d = await DB.load('ar', null);
+    if (d && Array.isArray(d.pts) && d.pts.length >= 3) ar = d;
+    arRefresh(false);
+    drawGpsDots();
+  }
+
+  // ======================================================================
+  // ===== مسح النظافة الميداني — وحدة مستقلة اختيارية (لا تغيّر أي حساب قديم) =====
+  // ======================================================================
+  const SEV_LABEL = { 1: 'خفيفة', 2: 'متوسطة', 3: 'شديدة', 4: 'تراكم كبير / نقطة سوداء' };
+  const SEG_CLASS = ['نظيف', 'تدنٍ خفيف', 'تدنٍ متوسط', 'تدنٍ شديد'];
+  const svEl = id => document.getElementById(id);
+  const sv = {
+    on: false, info: { district: '', contractor: '', contract: '', inspector: '', start: '', end: '', kind: 'car' },
+    segLen: 100, manualKm: 0, w: { 1: 1, 2: 2, 3: 3, 4: 5 }, t1: 2, t2: 5, deg: 0, cap: 10, margin: 20,
+    boundary: [], drawing: false, approved: false, approvedAt: '', log: [],
+    ded: { clause: '', value: '', rows: [] }, rounds: []
+  };
+  const svLayer = L.layerGroup().addTo(map);
+  let svBoundLayer = null, svObsQueue = [], svCurObs = null, svDupPending = null, svTimer = null;
+  const svSave = () => DB.save(JSON.parse(JSON.stringify(sv)), 'survey');
+  const nowLocal = () => { const d = new Date(); d.setMinutes(d.getMinutes() - d.getTimezoneOffset()); return d.toISOString().slice(0, 16); };
+  const fmtDT = v => v ? new Date(v).toLocaleString('ar-SA') : '—';
+  const num = (v, d) => { const n = parseFloat(String(v).replace(/[٠-٩]/g, x => '٠١٢٣٤٥٦٧٨٩'.indexOf(x)).replace(/[٫,]/g, '.')); return isFinite(n) ? n : d; };
+
+  // ---- داخل حدود الحي (مع هامش لانحراف GPS) ----
+  function svPip(p, poly) {
+    if (window.turf && turf.booleanPointInPolygon) {
+      try { return turf.booleanPointInPolygon(turf.point([p.lng, p.lat]), turf.polygon([[...poly.map(q => [q.lng, q.lat]), [poly[0].lng, poly[0].lat]]])); } catch (e) {}
+    }
+    let inside = false;   // بديل: خوارزمية تقاطع الأشعة
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[i], b = poly[j];
+      if ((a.lat > p.lat) !== (b.lat > p.lat) && p.lng < (b.lng - a.lng) * (p.lat - a.lat) / (b.lat - a.lat) + a.lng) inside = !inside;
+    }
+    return inside;
+  }
+  function svInside(p) {
+    const poly = sv.boundary;
+    if (poly.length < 3) return true;               // بدون حدود: المسار كله محتسب
+    if (svPip(p, poly)) return true;
+    for (let i = 0; i < poly.length; i++) if (distToLineM(p, poly[i], poly[(i + 1) % poly.length]) <= sv.margin) return true;
+    return false;
+  }
+
+  // ---- الحساب الرئيسي: القطاعات الثابتة وشدة الملاحظات ----
+  function svCompute() {
+    const s = arSource(), pts = s ? s.pts : [];
+    const segL = Math.max(1, sv.segLen);
+    // تقسيم المسار إلى مقاطع داخل الحي؛ لا يُعتبر خارجاً إلا بعد 3 قراءات متتالية، وعند العودة يبدأ مقطع جديد بلا مسافة وهمية
+    const pieces = []; let cur = null, state = pts.length ? svInside(pts[0]) : false, outRun = 0, exits = 0;
+    pts.forEach(p => {
+      const raw = svInside(p);
+      if (state) {
+        if (raw) outRun = 0; else outRun++;
+        if (outRun >= 3) { state = false; cur = null; exits++; return; }
+        if (!cur) { cur = []; pieces.push(cur); }
+        cur.push(p);
+      } else if (raw) { state = true; outRun = 0; cur = [p]; pieces.push(cur); }
+    });
+    // مسافة تراكمية داخل الحي فقط
+    let cum = 0; const nodes = [], pairs = [];
+    pieces.forEach((pc, k) => pc.forEach((p, i) => {
+      if (i > 0) { const d = distM(pc[i - 1], p); pairs.push({ a: pc[i - 1], b: p, from: cum, to: cum + d, piece: k }); cum += d; }
+      nodes.push({ p, cum, piece: k });
+    }));
+    // بدون تتبع GPS: تُستخدم المسافة المفحوصة المُدخلة يدوياً (اختياري)
+    const manual = cum < 1 && num(sv.manualKm, 0) > 0;
+    const dist = manual ? num(sv.manualKm, 0) * 1000 : cum;
+    // باقٍ أقل من متر واحد (فروق تقريب GPS) لا يُعتبر قطاعاً جديداً: 5000 م ÷ 100 م = 50 قطاعاً
+    const nSeg = dist >= 1 ? Math.max(1, Math.ceil((dist - 1) / segL)) : 0;
+    const segPts = new Array(nSeg).fill(0), segObs = Array.from({ length: nSeg }, () => []);
+    // الملاحظات (بعد استبعاد المدمجة)
+    const all = points.filter(p => p.obs);
+    const counted = all.filter(p => !p.obs.merged);
+    const manualZones = [];
+    const rows = counted.map(p => {
+      const w = num(sv.w[p.obs.sev], 0);
+      if (!svInside(p)) return { p, w, seg: null, why: 'خارج حدود الحي' };
+      if (manual) {
+        // بدون مسار: الملاحظات المتقاربة (ضمن نصف طول القطاع) تُعتبر في نفس القطاع
+        let z = manualZones.find(zz => distM(zz.c, p) <= segL / 2);
+        if (!z) { if (manualZones.length >= nSeg) return { p, w, seg: null, why: 'تجاوزت عدد القطاعات المُدخلة' }; z = { c: p, i: manualZones.length }; manualZones.push(z); }
+        segPts[z.i] += w; segObs[z.i].push(p.name);
+        return { p, w, seg: z.i, why: '' };
+      }
+      // إسقاط الملاحظة على أقرب جزء من المسار لمعرفة موقعها الدقيق على طول المسار
+      let bestCum = null, bd = Infinity;
+      const k = Math.PI / 180, R0 = 6371008.8, c0 = Math.cos(p.lat * k);
+      const X = q => [(q.lng - p.lng) * k * R0 * c0, (q.lat - p.lat) * k * R0];
+      pairs.forEach(pr => {
+        const [ax, ay] = X(pr.a), [bx, by] = X(pr.b), dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+        const t = L2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+        const d = Math.hypot(ax + t * dx, ay + t * dy);
+        if (d < bd) { bd = d; bestCum = pr.from + t * (pr.to - pr.from); }
+      });
+      if (!pairs.length) nodes.forEach(n => { const d = distM(p, n.p); if (d < bd) { bd = d; bestCum = n.cum; } });
+      if (bestCum === null || bd > Math.max(50, sv.margin * 2)) return { p, w, seg: null, why: nSeg ? 'بعيدة عن المسار المفحوص' : 'لا يوجد مسار مفحوص' };
+      const seg = Math.min(nSeg - 1, Math.floor(bestCum / segL));
+      segPts[seg] += w; segObs[seg].push(p.name);
+      return { p, w, seg, why: '' };
+    });
+    const cls = v => v <= 0 ? 0 : v <= sv.t1 ? 1 : v <= sv.t2 ? 2 : 3;
+    const segs = segPts.map((v, i) => ({ i, pts: v, cls: cls(v), deg: v > sv.deg, obs: segObs[i] }));
+    const degN = segs.filter(x => x.deg).length;
+    const sumPts = segPts.reduce((a, b) => a + b, 0);
+    const cappedSum = segPts.reduce((a, b) => a + Math.min(b, sv.cap), 0);
+    const prev = nSeg ? degN / nSeg * 100 : null;
+    const sevIdx = nSeg ? cappedSum / (nSeg * sv.cap) * 100 : null;
+    // الخصم حسب جدول العقد (لا يساوي نسبة التدني تلقائياً)
+    let ded = null;
+    if (prev !== null && sv.ded.rows.length) {
+      const row = sv.ded.rows.find(r => prev >= num(r.from, -1) && prev <= num(r.to, -1));
+      const pct = row ? num(row.pct, 0) : 0, val = num(sv.ded.value, 0);
+      ded = { row, pct, amount: val ? val * pct / 100 : null };
+    }
+    // تباعد الصور: ملاحظات تبعد أكثر من 3 كم عن بعضها
+    let far = false;
+    for (let i = 0; i < counted.length && !far; i++) for (let j = i + 1; j < counted.length; j++) if (distM(counted[i], counted[j]) > 3000) { far = true; break; }
+    return { s, manual, L: segL, pieces, pairs, dist, nSeg, segs, degN, sumPts, cappedSum, prev, sevIdx, ded, rows, all, counted,
+      merged: all.filter(p => p.obs.merged), outObs: rows.filter(r => r.seg === null), exits, far };
+  }
+  const svPct = v => v === null ? '—' : (Math.round(v * 100) / 100) + '%';
+
+  // ---- العرض ----
+  function svRender() {
+    svEl('svApprovedTag').hidden = !sv.approved;
+    svEl('svApprove').textContent = sv.approved ? '🔓 إلغاء الاعتماد' : '✅ اعتماد الجولة';
+    svEl('expLabel').hidden = !sv.on;
+    svEl('svBoundInfo').textContent = sv.boundary.length >= 3
+      ? `حدود الحي: ${sv.boundary.length} نقاط — الهامش ${sv.margin} م.` : (sv.drawing ? `جاري الرسم: ${sv.boundary.length} نقاط — اضغط على الخريطة لإضافة نقطة.` : 'لم تُرسم حدود — يُحسب المسار كاملاً.');
+    const r = svCompute();
+    svDrawMap(r);
+    // النسبة أعلى الصفحة
+    svEl('svTopPrev').textContent = svPct(r.prev);
+    svEl('svTopSev').textContent = svPct(r.sevIdx);
+    svEl('svTopPrevEq').textContent = r.nSeg ? `${r.degN} ÷ ${r.nSeg} قطاع × 100${sv.info.district ? ' — ' + sv.info.district : ''}` : 'شغّل «مسح النظافة» وابدأ التتبع أو أدخل المسافة يدوياً';
+    svEl('svTopSevEq').textContent = r.nSeg ? `${r.cappedSum} ÷ (${r.nSeg} × ${sv.cap}) × 100` : '';
+    const segBoxes = r.segs.map(x => `<span class="sv-c${x.cls}" title="قطاع ${x.i + 1}: ${x.pts} نقطة">${x.i + 1}</span>`).join('');
+    const ded = r.ded;
+    svEl('svResult').innerHTML = `
+      <h4>📊 نتيجة المسح الميداني${sv.info.district ? ' — ' + esc(sv.info.district) : ''}</h4>
+      <table>
+        <tr><td>المسافة المفحوصة فعلًا داخل الحي</td><td><b>${fmtNice(r.dist)}</b>${r.manual ? ' (مُدخلة يدوياً — بدون تتبع)' : ''}${r.exits ? ` (خروج من الحي ${r.exits} مرة — لم تُحسب مسافاته)` : ''}</td></tr>
+        <tr><td>طول القطاع</td><td>${r.L} م</td></tr>
+        <tr><td>إجمالي القطاعات المفحوصة</td><td><b>${r.nSeg}</b>${r.nSeg ? ` (${Math.round(r.dist)} م ÷ ${r.L} م، مقرّبة للأعلى)` : ''}</td></tr>
+        <tr><td>عدد الملاحظات بعد حذف التكرار</td><td>${r.counted.length}${r.merged.length ? ` (+${r.merged.length} صور مدمجة كأدلة)` : ''}</td></tr>
+        <tr><td>ملاحظات غير محتسبة</td><td>${r.outObs.length ? r.outObs.map(o => `${o.p.name}: ${o.why}`).join('، ') : '—'}</td></tr>
+        <tr><td>مجموع نقاط الشدة</td><td>${r.sumPts} نقطة</td></tr>
+        <tr><td>القطاعات المتدنية (نقاطها &gt; ${sv.deg})</td><td><b>${r.degN}</b> من ${r.nSeg}</td></tr>
+      </table>
+      ${r.nSeg ? `<div class="sv-segs">${segBoxes}</div>
+      <div class="sv-note"><span class="sv-c0" style="display:inline-block;width:12px;height:12px;border-radius:3px"></span> نظيف
+        <span class="sv-c1" style="display:inline-block;width:12px;height:12px;border-radius:3px"></span> تدنٍ خفيف
+        <span class="sv-c2" style="display:inline-block;width:12px;height:12px;border-radius:3px"></span> تدنٍ متوسط
+        <span class="sv-c3" style="display:inline-block;width:12px;height:12px;border-radius:3px"></span> تدنٍ شديد</div>` : ''}
+      <div class="sv-big">
+        <div class="prev"><small>نسبة انتشار تدني النظافة</small><b>${svPct(r.prev)}</b>
+          <span class="eq">${r.nSeg ? `${r.degN} ÷ ${r.nSeg} × 100` : 'ابدأ تتبع الرحلة لحساب القطاعات'}</span></div>
+        <div class="sevi"><small>مؤشر شدة التدني</small><b>${svPct(r.sevIdx)}</b>
+          <span class="eq">${r.nSeg ? `${r.cappedSum} ÷ (${r.nSeg} × ${sv.cap}) × 100` : '—'}</span></div>
+      </div>
+      <div class="sv-ded-res">
+        <b>الخصم من المستخلص</b><br>
+        ${!sv.ded.rows.length ? 'لم يُدخل جدول خصم من العقد — لا يُحسب خصم.' :
+          `بند العقد: ${esc(sv.ded.clause || '—')}<br>
+           طريقة التحويل: نسبة انتشار التدني ${svPct(r.prev)} تقع في الشريحة ${ded && ded.row ? `${ded.row.from}% – ${ded.row.to}%` : '(لا توجد شريحة مطابقة)'}<br>
+           قيمة الخصم المقترحة: <b>${ded ? ded.pct + '%' : '—'}</b>${ded && ded.amount !== null ? ` = ${ded.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ريال` : ''}`}
+      </div>
+      ${r.manual ? '<div class="sv-warn">📝 حساب بدون تتبع: القطاعات من المسافة المُدخلة يدوياً، والملاحظات المتقاربة (ضمن نصف طول القطاع) تُعدّ قطاعاً واحداً. التتبع بـ GPS أدق لأنه يثبت المسار المفحوص فعلاً.</div>' : ''}
+      ${!r.nSeg && r.counted.length ? '<div class="sv-warn">لحساب النسبة: ابدأ تتبع الجولة، أو أدخل «المسافة المفحوصة يدوياً» في بيانات الجولة.</div>' : ''}
+      <div class="sv-warn">الاعتماد النهائي حسب صلاحية الجهة وشروط العقد. نسبة انتشار التدني ومؤشر الشدة نتيجتان مستقلتان، ولا تساوي أيٌّ منهما نسبة الخصم تلقائيًا.
+        القطاعات تُحسب من المسافة المفحوصة، لا من عدد نقاط GPS ولا من مساحة المضلع بين الصور.</div>
+      ${r.far ? '<div class="sv-warn">⚠️ توجد ملاحظات في مناطق متباعدة (أكثر من 3 كم). أنشئ جولة مستقلة لكل حي باستخدام «حفظ الجولة وبدء جولة جديدة».</div>' : ''}`;
+    // قائمة الملاحظات
+    svEl('svObsList').innerHTML = r.all.length ? `<h4>📷 صور الجولة (${r.all.length})</h4><div class="sv-tbl-wrap"><table>
+      <tr><th>الصورة</th><th></th><th>النوع</th><th>الشدة</th><th>ملاحظات</th></tr>
+      ${r.all.map(p => { const row = r.rows.find(x => x.p === p);
+        return `<tr data-n="${p.name}"><td><b>${p.name}</b><br><small>${p.time}</small></td><td><img src="${p.img}" alt=""></td>
+          <td><select class="svo-type">${[...svEl('svObsType').options].map(o => `<option${o.value === p.obs.type ? ' selected' : ''}>${o.value}</option>`).join('')}</select></td>
+          <td><select class="svo-sev">${[1, 2, 3, 4].map(k => `<option value="${k}"${+p.obs.sev === k ? ' selected' : ''}>${SEV_LABEL[k]} (${sv.w[k]})</option>`).join('')}</select></td>
+          <td><input class="svo-note" value="${esc(p.obs.note || '')}"></td></tr>`; }).join('')}
+      </table></div>` : (sv.on ? '<div class="sv-note">لا توجد ملاحظات بعد — التقط صورة النفايات وسجّل نوعها وشدتها.</div>' : '');
+    svEl('svObsList').querySelectorAll('tr[data-n]').forEach(tr => {
+      const p = points.find(q => q.name === tr.dataset.n);
+      const upd = (field, val, label) => {
+        const old = p.obs[field];
+        if (String(old) === String(val)) return;
+        if (!svGuard(`${label} للملاحظة ${p.name}`, String(field === 'sev' ? SEV_LABEL[old] : old), String(field === 'sev' ? SEV_LABEL[val] : val))) { svRender(); return; }
+        p.obs[field] = field === 'sev' ? +val : val; persist(); svRender();
+      };
+      tr.querySelector('.svo-type').onchange = e => upd('type', e.target.value, 'تعديل نوع المخالفة');
+      tr.querySelector('.svo-sev').onchange = e => upd('sev', e.target.value, 'تعديل درجة الشدة');
+      tr.querySelector('.svo-note').onchange = e => upd('note', e.target.value, 'تعديل ملاحظات المراقب');
+    });
+    // الجولات المحفوظة والملخص العام المرجّح
+    const all2 = [...sv.rounds, ...(r.nSeg ? [{ district: sv.info.district || '(الجولة الحالية)', nSeg: r.nSeg, degN: r.degN, prev: r.prev, sevIdx: r.sevIdx, dist: r.dist, current: true }] : [])];
+    const tSeg = all2.reduce((a, x) => a + x.nSeg, 0), tDeg = all2.reduce((a, x) => a + x.degN, 0);
+    svEl('svRounds').innerHTML = sv.rounds.length ? `<h4>🗂️ الجولات والملخص العام</h4><div class="sv-tbl-wrap"><table>
+      <tr><th>الحي</th><th>المسافة</th><th>القطاعات</th><th>المتدنية</th><th>الانتشار</th><th>الشدة</th></tr>
+      ${all2.map(x => `<tr><td>${esc(x.district || '—')}${x.current ? ' (حالية)' : ''}</td><td>${fmtNice(x.dist)}</td><td>${x.nSeg}</td><td>${x.degN}</td><td>${svPct(x.prev)}</td><td>${svPct(x.sevIdx)}</td></tr>`).join('')}
+      <tr><td colspan="2"><b>الملخص العام المرجّح</b></td><td><b>${tSeg}</b></td><td><b>${tDeg}</b></td><td colspan="2"><b>${tSeg ? svPct(tDeg / tSeg * 100) : '—'}</b> = ${tDeg} ÷ ${tSeg} × 100</td></tr>
+      </table></div>` : '';
+    svEl('svLog').innerHTML = sv.log.length ? `<h4>📝 سجل التعديلات بعد الاعتماد</h4><div class="sv-tbl-wrap"><table>
+      <tr><th>التاريخ</th><th>التعديل</th><th>من</th><th>إلى</th><th>السبب</th></tr>
+      ${sv.log.map(l => `<tr><td>${l.at}</td><td>${esc(l.what)}</td><td>${esc(l.from || '—')}</td><td>${esc(l.to || '—')}</td><td>${esc(l.reason)}</td></tr>`).join('')}</table></div>` : '';
+  }
+  const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const svSchedule = () => { if (!sv.on && !points.some(p => p.obs)) return; clearTimeout(svTimer); svTimer = setTimeout(svRender, 500); };
+
+  // تلوين القطاعات على الخريطة + حدود الحي
+  function svDrawMap(r) {
+    svLayer.clearLayers();
+    if (svBoundLayer) { map.removeLayer(svBoundLayer); svBoundLayer = null; }
+    if (sv.boundary.length) {
+      const ll = sv.boundary.map(p => [p.lat, p.lng]);
+      svBoundLayer = (sv.boundary.length >= 3 && !sv.drawing ? L.polygon(ll, { color: '#ef6c00', weight: 3, dashArray: '8 6', fillOpacity: 0.04 })
+        : L.polyline(ll, { color: '#ef6c00', weight: 3, dashArray: '8 6' })).addTo(map);
+      if (sv.drawing) sv.boundary.forEach(p => L.circleMarker([p.lat, p.lng], { radius: 5, color: '#ef6c00', fillOpacity: 1 }).addTo(svLayer));
+    }
+    if (!sv.on || !r.nSeg) return;
+    const colors = ['#2e7d32', '#f9a825', '#ef6c00', '#c62828'];
+    r.pairs.forEach(pr => {
+      const seg = Math.max(0, Math.min(r.nSeg - 1, Math.floor(((pr.from + pr.to) / 2) / r.L)));
+      L.polyline([[pr.a.lat, pr.a.lng], [pr.b.lat, pr.b.lng]], { color: colors[r.segs[seg].cls], weight: 6, opacity: 0.9, interactive: false }).addTo(svLayer);
+    });
+  }
+
+  // ---- سجل التعديل بعد الاعتماد ----
+  function svGuard(what, from, to) {
+    if (!sv.approved) return true;
+    const reason = prompt(`الجولة معتمدة.\n${what}\nاكتب سبب التعديل (سيُسجَّل في التقرير):`);
+    if (!reason || !reason.trim()) { alert('لم يُنفَّذ التعديل لأن السبب فارغ.'); return false; }
+    sv.log.push({ at: new Date().toLocaleString('ar-SA'), what, from: from || '', to: to || '', reason: reason.trim() });
+    svSave();
+    return true;
+  }
+
+  // ---- تسجيل ملاحظة نفايات بعد كل صورة ----
+  function svQueuePhoto(i) {
+    if (!sv.on) return;
+    svObsQueue.push(points[i]);
+    if (!svCurObs) svNextObs();
+  }
+  function svNextObs() {
+    svCurObs = svObsQueue.shift() || null;
+    if (!svCurObs) { svEl('svObsSheet').hidden = true; return; }
+    svEl('svObsName').textContent = svCurObs.name;
+    svEl('svObsImg').src = svCurObs.img;
+    svEl('svObsNote').value = '';
+    document.querySelector('input[name="svSev"][value="1"]').checked = true;
+    svEl('svObsSheet').hidden = false;
+  }
+  svEl('svObsSkip').onclick = () => { svNextObs(); };
+  svEl('svObsSave').onclick = async () => {
+    const p = svCurObs; if (!p) return;
+    p.obs = { type: svEl('svObsType').value, sev: +document.querySelector('input[name="svSev"]:checked').value,
+      note: svEl('svObsNote').value.trim(), merged: null, at: Date.now() };
+    await persist();
+    svEl('svObsSheet').hidden = true;
+    // منع التكرار: نفس النوع، أقل من 20 م، وخلال 15 دقيقة
+    const prev = points.find(q => q !== p && q.obs && !q.obs.merged && q.obs.type === p.obs.type && distM(q, p) < 20 && Math.abs((q.obs.at || 0) - p.obs.at) < 15 * 60000);
+    if (prev) {
+      svDupPending = { p, prev };
+      svEl('svDupText').textContent = `الصورة ${p.name} من نوع «${p.obs.type}» وتبعد ${fmtNice(distM(prev, p))} عن الملاحظة ${prev.name} وخلال مدة قصيرة.`;
+      svEl('svDupSheet').hidden = false;
+    } else { svRender(); svNextObs(); }
+  };
+  svEl('svDupMerge').onclick = async () => {
+    const d = svDupPending; svDupPending = null; svEl('svDupSheet').hidden = true;
+    if (d) { d.p.obs.merged = d.prev.name; await persist(); }   // تبقى دليلاً وتُحسب ملاحظة واحدة
+    svRender(); svNextObs();
+  };
+  svEl('svDupSeparate').onclick = () => { svDupPending = null; svEl('svDupSheet').hidden = true; svRender(); svNextObs(); };
+
+  // ---- رسم حدود الحي ----
+  map.on('click', e => {
+    if (!sv.drawing) return;
+    sv.boundary.push({ lat: e.latlng.lat, lng: e.latlng.lng });
+    svSave(); svRender();
+  });
+  function svSetDrawing(on) {
+    sv.drawing = on;
+    document.body.classList.toggle('sv-drawing', on);
+    svEl('svDraw').hidden = on; svEl('svDrawDone').hidden = !on; svEl('svDrawUndo').hidden = !on;
+    svSave(); svRender();
+    if (on) svEl('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  svEl('svDraw').onclick = () => {
+    if (sv.boundary.length && !svGuard('إعادة رسم حدود الحي')) return;
+    sv.boundary = []; svSetDrawing(true);
+  };
+  svEl('svDrawDone').onclick = () => {
+    if (sv.boundary.length < 3) { alert('حدود الحي تحتاج 3 نقاط على الأقل.'); return; }
+    svSetDrawing(false);
+    if (svBoundLayer) map.fitBounds(svBoundLayer.getBounds().pad(0.1));
+  };
+  svEl('svDrawUndo').onclick = () => { sv.boundary.pop(); svSave(); svRender(); };
+  svEl('svBoundClear').onclick = () => {
+    if (!sv.boundary.length || !svGuard('مسح حدود الحي')) return;
+    sv.boundary = []; svSetDrawing(false);
+  };
+
+  // ---- الحقول والإعدادات ----
+  const SV_FIELDS = { svDistrict: 'district', svContractor: 'contractor', svContract: 'contract', svInspector: 'inspector', svStart: 'start', svEnd: 'end', svKind: 'kind' };
+  Object.entries(SV_FIELDS).forEach(([id, k]) => svEl(id).addEventListener('change', e => {
+    if (!svGuard(`تعديل «${e.target.closest('label').firstChild.textContent.trim()}»`, sv.info[k], e.target.value)) { e.target.value = sv.info[k]; return; }
+    sv.info[k] = e.target.value; svSave(); svRender();
+  }));
+  document.querySelectorAll('.sv-now').forEach(b => b.onclick = () => { const i = svEl(b.dataset.for); i.value = nowLocal(); i.dispatchEvent(new Event('change')); });
+  const SV_NUMS = { svSegLen: 'segLen', svManualKm: 'manualKm', svMargin: 'margin', svT1: 't1', svT2: 't2', svDeg: 'deg', svCap: 'cap' };
+  Object.entries(SV_NUMS).forEach(([id, k]) => svEl(id).addEventListener('change', e => {
+    const v = num(e.target.value, sv[k]);
+    if (!svGuard(`تعديل إعداد الحساب (${k})`, sv[k], v)) { e.target.value = sv[k]; return; }
+    sv[k] = v; svSave(); svRender();
+  }));
+  [1, 2, 3, 4].forEach(k => svEl('svW' + k).addEventListener('change', e => {
+    const v = num(e.target.value, sv.w[k]);
+    if (!svGuard(`تعديل وزن الشدة «${SEV_LABEL[k]}»`, sv.w[k], v)) { e.target.value = sv.w[k]; return; }
+    sv.w[k] = v; svSave(); svRender();
+  }));
+  ['svClause', 'svValue'].forEach(id => svEl(id).addEventListener('change', e => {
+    const k = id === 'svClause' ? 'clause' : 'value';
+    if (!svGuard('تعديل بيانات الخصم', sv.ded[k], e.target.value)) { e.target.value = sv.ded[k]; return; }
+    sv.ded[k] = e.target.value; svSave(); svRender();
+  }));
+  function svRenderDed() {
+    svEl('svDedRows').innerHTML = sv.ded.rows.map((r, i) => `<tr data-i="${i}">
+      <td><input class="d-from" inputmode="decimal" value="${esc(r.from)}"></td><td><input class="d-to" inputmode="decimal" value="${esc(r.to)}"></td><td><input class="d-pct" inputmode="decimal" value="${esc(r.pct)}"></td></tr>`).join('');
+    svEl('svDedRows').querySelectorAll('tr').forEach(tr => tr.querySelectorAll('input').forEach(inp => inp.onchange = () => {
+      const r = sv.ded.rows[+tr.dataset.i], k = inp.className.slice(2);
+      if (!svGuard('تعديل شريحة الخصم', r[k], inp.value)) { inp.value = r[k]; return; }
+      r[k] = inp.value; svSave(); svRender();
+    }));
+  }
+  svEl('svDedAdd').onclick = () => {
+    if (!svGuard('إضافة شريحة خصم')) return;
+    const last = sv.ded.rows[sv.ded.rows.length - 1];
+    sv.ded.rows.push({ from: last ? last.to : '0', to: '', pct: '' }); svSave(); svRenderDed(); svRender();
+  };
+  svEl('svDedDel').onclick = () => { if (!sv.ded.rows.length || !svGuard('حذف شريحة خصم')) return; sv.ded.rows.pop(); svSave(); svRenderDed(); svRender(); };
+
+  function svFillForm() {
+    Object.entries(SV_FIELDS).forEach(([id, k]) => svEl(id).value = sv.info[k] || (k === 'kind' ? 'car' : ''));
+    Object.entries(SV_NUMS).forEach(([id, k]) => svEl(id).value = k === 'manualKm' && !sv[k] ? '' : sv[k]);
+    [1, 2, 3, 4].forEach(k => svEl('svW' + k).value = sv.w[k]);
+    svEl('svClause').value = sv.ded.clause; svEl('svValue').value = sv.ded.value;
+    svEl('svOn').checked = sv.on;
+    svRenderDed();
+    svEl('svDraw').hidden = sv.drawing; svEl('svDrawDone').hidden = !sv.drawing; svEl('svDrawUndo').hidden = !sv.drawing;
+    document.body.classList.toggle('sv-drawing', sv.drawing);
+  }
+
+  svEl('svBtn').onclick = () => { svEl('svCard').hidden = !svEl('svCard').hidden; if (!svEl('svCard').hidden) svRender(); };
+  svEl('svClose').onclick = () => { svEl('svCard').hidden = true; };
+  svEl('svOn').onchange = e => {
+    sv.on = e.target.checked;
+    if (sv.on && !sv.info.start) { sv.info.start = nowLocal(); svEl('svStart').value = sv.info.start; }
+    svSave(); svRender();
+  };
+  svEl('svApprove').onclick = () => {
+    if (!sv.approved) {
+      if (!confirm('اعتماد الجولة؟ بعد الاعتماد لا يُسمح بتعديل صورة أو إحداثية أو درجة شدة إلا مع كتابة السبب وتسجيله.')) return;
+      if (!sv.info.end) { sv.info.end = nowLocal(); svEl('svEnd').value = sv.info.end; }
+      sv.approved = true; sv.approvedAt = new Date().toLocaleString('ar-SA');
+      sv.log.push({ at: sv.approvedAt, what: 'اعتماد الجولة', from: '', to: '', reason: '—' });
+    } else {
+      if (!svGuard('إلغاء اعتماد الجولة')) return;
+      sv.approved = false;
+    }
+    svSave(); svRender();
+  };
+  svEl('svNewRound').onclick = () => {
+    const r = svCompute();
+    if (!confirm('حفظ نتيجة الجولة الحالية في قائمة الجولات وبدء جولة جديدة؟\n(الصور والمسار لا تُحذف تلقائياً؛ امسحها إذا كانت الجولة الجديدة في حي آخر)')) return;
+    sv.rounds.push({ district: sv.info.district, contractor: sv.info.contractor, start: sv.info.start, end: sv.info.end || nowLocal(),
+      dist: r.dist, nSeg: r.nSeg, degN: r.degN, prev: r.prev, sevIdx: r.sevIdx, nObs: r.counted.length, sumPts: r.sumPts, at: new Date().toLocaleString('ar-SA') });
+    // الملاحظات المحتسبة في الجولة المحفوظة لا تُحسب مرة أخرى
+    points.forEach(p => { if (p.obs) p.obs.round = sv.rounds.length; });
+    points.forEach(p => { if (p.obs && p.obs.round) { p.obsArchived = p.obs; delete p.obs; } });
+    persist();
+    sv.info = { ...sv.info, district: '', start: nowLocal(), end: '' };
+    sv.boundary = []; sv.approved = false; sv.log = [];
+    svSave(); svFillForm(); svRender();
+  };
+
+  // ---- أزرار سريعة: التتبع والموقع والصور من داخل مسح النظافة ----
+  let svLocMarker = null;
+  function svTrackUI() {
+    const tracking = fs.state === 'tracking', paused = fs.state === 'paused' && fs.pts.length;
+    svEl('svTrackGo').disabled = tracking;
+    svEl('svTrackGo').textContent = paused ? '⏯ متابعة تتبع الجولة' : '▶ بدء تتبع الجولة';
+    svEl('svTrackStop').disabled = !tracking;
+    svEl('svTrackInfo').textContent = tracking ? `🔵 جاري التتبع (${sv.info.kind === 'walk' ? 'مشي' : 'سيارة'}) — المسافة: ${fmtNice(fs.dist)} — دقة GPS: ${fs.lastAcc != null ? '±' + Math.round(fs.lastAcc) + ' م' : '…'}`
+      : paused ? `🟡 متوقف مؤقتاً — المسافة المسجلة: ${fmtNice(fs.dist)}` : 'اضغط «بدء تتبع الجولة» لتسجيل مسارك وتحديد موقعك على الخريطة.';
+  }
+  svEl('svTrackGo').onclick = async () => {
+    if (!sv.on) { sv.on = true; svEl('svOn').checked = true; if (!sv.info.start) { sv.info.start = nowLocal(); svEl('svStart').value = sv.info.start; } svSave(); }
+    // نوع الحركة من بيانات الجولة
+    if (fs.type !== sv.info.kind) { fs.type = sv.info.kind; setSetting('pm_fs_type', fs.type); fsRedrawPath(); }
+    if (fs.state === 'paused' && fs.pts.length) { fsEl('fsResume').click(); }
+    else await fsBegin({ noTargetAsk: true });
+    if (svLocMarker) { map.removeLayer(svLocMarker); svLocMarker = null; }
+    // تحديد الموقع فوراً قبل وصول أول نقطة مقبولة
+    getHere().then(c => { if (!fs.pts.length) map.setView([c.latitude, c.longitude], sv.info.kind === 'walk' ? 18 : 17); }).catch(() => {});
+    svEl('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    svTrackUI(); svRender();
+  };
+  svEl('svTrackStop').onclick = () => { fsEl('fsPause').click(); svTrackUI(); };
+  svEl('svLocate').onclick = async () => {
+    svEl('svTrackInfo').textContent = 'جاري تحديد موقعك...';
+    try {
+      const c = await getHere();
+      if (svLocMarker) map.removeLayer(svLocMarker);
+      svLocMarker = L.circleMarker([c.latitude, c.longitude], { radius: 9, color: '#fff', weight: 3, fillColor: '#1565c0', fillOpacity: 1 }).addTo(map)
+        .bindPopup(`📍 موقعك الآن<br><span dir="ltr">${c.latitude.toFixed(6)}, ${c.longitude.toFixed(6)}</span><br>الدقة ±${Math.round(c.accuracy)} م`).openPopup();
+      map.setView([c.latitude, c.longitude], 18);
+      svEl('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      svTrackUI();
+    } catch (e) { svEl('svTrackInfo').textContent = 'تعذّر تحديد الموقع — فعّل GPS واسمح للمتصفح بالوصول إلى الموقع.'; }
+  };
+  svEl('svAttach').onclick = () => document.getElementById('galleryInput').click();
+
+  async function svRestore() {
+    const d = await DB.load('survey', null);
+    if (d && typeof d === 'object') {
+      Object.assign(sv, d);
+      sv.info = { ...{ district: '', contractor: '', contract: '', inspector: '', start: '', end: '', kind: 'car' }, ...(d.info || {}) };
+      sv.w = { 1: 1, 2: 2, 3: 3, 4: 5, ...(d.w || {}) };
+      sv.ded = { clause: '', value: '', rows: [], ...(d.ded || {}) };
+      sv.boundary = Array.isArray(d.boundary) ? d.boundary : [];
+      sv.log = Array.isArray(d.log) ? d.log : []; sv.rounds = Array.isArray(d.rounds) ? d.rounds : [];
+    }
+    svFillForm();
+    svTrackUI();
+    svRender();   // يحدّث نسبة النظافة أعلى الصفحة دائماً
+  }
+
+  // ===== أزرار الاختيار =====
+  function applyView() {
+    document.body.classList.toggle('web', viewMode === 'web');
+    document.body.classList.toggle('mobile', viewMode !== 'web');
+    document.querySelectorAll('#viewSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === viewMode));
+    setTimeout(() => { map.invalidateSize(); fitAll(); }, 150);
+  }
+  function applyShape() {
+    document.querySelectorAll('#shapeSeg button').forEach(b => b.classList.toggle('on', b.dataset.s === shapeMode));
+  }
+  document.querySelectorAll('#viewSeg button').forEach(b => b.onclick = () => {
+    viewMode = b.dataset.v; setSetting('pm_view', viewMode); applyView();
+  });
+  document.querySelectorAll('#shapeSeg button').forEach(b => b.onclick = () => {
+    shapeMode = b.dataset.s; setSetting('pm_shape', shapeMode); applyShape(); redraw();
+  });
+
+  // ===== الالتقاط =====
+  document.getElementById('captureBtn').onclick = () => { stopPick(); openCamera(); };
+
+  // تحديد الموقع ثم إضافة النقطة (مشترك بين الكاميرا والمعرض)
+  function locateAndAdd(imgData) {
+    statusEl.textContent = 'جاري تحديد الموقع...';
+    if (!navigator.geolocation) { statusEl.textContent = 'المتصفح لا يدعم تحديد الموقع.'; return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => addPoint(imgData, pos.coords).then(() => flyToPhotos([points[points.length - 1]])),
+      err => { statusEl.textContent = 'تعذّر تحديد الموقع: فعّل الموقع واسمح للمتصفح بالوصول. (' + err.message + ')'; },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+  }
+  // ===== قراءة الموقع والوقت من داخل الصورة (EXIF) =====
+  function readExif(buf) {
+    try {
+      const v = new DataView(buf);
+      if (v.byteLength < 4 || v.getUint16(0) !== 0xFFD8) return null;   // JPEG فقط
+      let off = 2;
+      while (off + 4 < v.byteLength) {
+        const m = v.getUint16(off);
+        if ((m & 0xFF00) !== 0xFF00) break;
+        const len = v.getUint16(off + 2);
+        if (m === 0xFFE1 && v.getUint32(off + 4) === 0x45786966) return parseTiff(v, off + 10);
+        if (m === 0xFFDA) break;
+        off += 2 + len;
+      }
+    } catch (e) {}
+    return null;
+  }
+  function parseTiff(v, t) {
+    const le = v.getUint16(t) === 0x4949;
+    const u16 = o => v.getUint16(o, le), u32 = o => v.getUint32(o, le);
+    const SIZE = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 7: 1, 9: 4, 10: 8 };
+    const ifd = o => {
+      const n = u16(o), tags = {};
+      for (let i = 0; i < n; i++) { const e = o + 2 + i * 12; tags[u16(e)] = { type: u16(e + 2), count: u32(e + 4), at: e + 8 }; }
+      return tags;
+    };
+    const ptr = tg => (SIZE[tg.type] || 1) * tg.count <= 4 ? tg.at : t + u32(tg.at);
+    const rat = o => { const d = u32(o + 4); return d ? u32(o) / d : 0; };
+    const str = tg => { const p = ptr(tg); let s = ''; for (let i = 0; i < tg.count; i++) { const c = v.getUint8(p + i); if (!c) break; s += String.fromCharCode(c); } return s; };
+    const out = {};
+    const ifd0 = ifd(t + u32(t + 4));
+    if (ifd0[0x8825]) {
+      const g = ifd(t + u32(ifd0[0x8825].at));
+      if (g[2] && g[4]) {
+        const dms = tg => { const p = ptr(tg); return rat(p) + rat(p + 8) / 60 + rat(p + 16) / 3600; };
+        let lat = dms(g[2]), lng = dms(g[4]);
+        if (g[1] && str(g[1]).toUpperCase() === 'S') lat = -lat;
+        if (g[3] && str(g[3]).toUpperCase() === 'W') lng = -lng;
+        if ((lat || lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) { out.lat = lat; out.lng = lng; }
+        if (g[0x1F]) out.acc = rat(ptr(g[0x1F]));
+      }
+    }
+    const toDate = s => { const m = (s || '').match(/(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/); return m ? new Date(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null; };
+    if (ifd0[0x8769]) {
+      const ex = ifd(t + u32(ifd0[0x8769].at));
+      const tg = ex[0x9003] || ex[0x9004];
+      if (tg) out.date = toDate(str(tg));
+    }
+    if (!out.date && ifd0[0x0132]) out.date = toDate(str(ifd0[0x0132]));
+    return out;
+  }
+  // ===== قراءة الإحداثيات المكتوبة على الصورة (OCR) =====
+  let ocrWorker = null;
+  function loadScript(src) {
+    return new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = src; s.onload = res; s.onerror = () => rej(new Error('load ' + src));
+      document.head.appendChild(s);
+    });
+  }
+  async function getOcr() {
+    if (ocrWorker) return ocrWorker;
+    if (!window.Tesseract) await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+    ocrWorker = await Tesseract.createWorker('eng');
+    await ocrWorker.setParameters({ tessedit_pageseg_mode: '6', preserve_interword_spaces: '1' });
+    return ocrWorker;
+  }
+  // استخراج خط العرض وخط الطول من النص المقروء
+  function parseCoords(text) {
+    const t = text
+      .replace(/(\d)[Oo]|[Oo](\d)/g, (m, a, b) => (a || '') + '0' + (b || ''))
+      // حروف يخلطها قارئ النص مع الأرقام عندما تلتصق برقم: Z→2، S→5، l/I/|→1، B→8
+      .replace(/[Zz](?=[\d.])|(?<=\d)[Zz]/g, '2').replace(/S(?=[\d.])|(?<=\d)S/g, '5')
+      .replace(/[lI|](?=[\d.])|(?<=\d)[lI|]/g, '1').replace(/B(?=\d)|(?<=\d)B/g, '8')
+      .replace(/(\d)\.\s+(\d)/g, '$1.$2')
+      .replace(/(\d),(\d{4,})/g, '$1.$2');
+    const ok = (a, b) => Math.abs(a) <= 90 && Math.abs(b) <= 180 && a !== 0 && b !== 0;
+    // صيغة عشرية: 21.2457513 40.36679293
+    const re = /(-?\d{1,3}\.\d{4,})[^\d\-]{1,12}?(-?\d{1,3}\.\d{4,})/g;
+    let m;
+    while ((m = re.exec(t))) {
+      let a = m[1], b = m[2];
+      if (Math.abs(+a) > 90 && Math.abs(+b) <= 90) [a, b] = [b, a];
+      if (ok(+a, +b)) return { lat: +a, lng: +b, latText: a, lngText: b };
+    }
+    // صيغة درجات ودقائق وثوانٍ: 21°14'44.7"N 40°22'0.4"E
+    const d = [...t.matchAll(/(\d{1,3})\s*[°º]\s*(\d{1,2})\s*['′’]\s*([\d.]+)\s*["″”]?\s*([NSEW])/gi)];
+    if (d.length >= 2) {
+      const v = x => (+x[1] + +x[2] / 60 + +x[3] / 3600) * (/[SW]/i.test(x[4]) ? -1 : 1);
+      const la = d.find(x => /[NS]/i.test(x[4])), lo = d.find(x => /[EW]/i.test(x[4]));
+      if (la && lo && ok(v(la), v(lo))) return { lat: v(la), lng: v(lo), latText: la[0].trim(), lngText: lo[0].trim() };
+    }
+    return null;
+  }
+  // فحص منطقية الإحداثيات المقروءة من النص مقارنةً بمرجع قريب (صورة سابقة أو موقعك)،
+  // وإصلاح رقم ضائع أو مقروء خطأً في بداية خط العرض/الطول، مثل 1.27799294 ← 21.27799294
+  const OCR_MAX_KM = 50;
+  function ocrRepair(oc, ref) {
+    if (!oc || !ref) return { c: oc, fixed: false, sure: !ref };
+    if (distM(oc, ref) <= OCR_MAX_KM * 1000) return { c: oc, fixed: false, sure: true };
+    const variants = (txt, refVal) => {
+      const out = new Set([txt]);
+      const m = String(txt).match(/^(-?)(\d+)(\.\d+)$/);
+      if (m) {
+        const ip = m[2];
+        for (let k = 0; k <= ip.length; k++) for (const d of '0123456789') {
+          out.add(m[1] + ip.slice(0, k) + d + ip.slice(k) + m[3]);                         // رقم ضائع (1.27 ← 21.27، 4.38 ← 40.38)
+          if (k < ip.length) out.add(m[1] + ip.slice(0, k) + d + ip.slice(k + 1) + m[3]);  // رقم مقروء خطأ (31.27 ← 21.27)
+        }
+        if (ip.length > 1) for (let k = 0; k < ip.length; k++) out.add(m[1] + ip.slice(0, k) + ip.slice(k + 1) + m[3]);   // رقم زائد
+      }
+      return [...out].filter(v => isFinite(+v) && Math.abs(+v - refVal) < 0.6);
+    };
+    let best = null;
+    variants(oc.latText, ref.lat).forEach(la => variants(oc.lngText, ref.lng).forEach(lo => {
+      const c = { lat: +la, lng: +lo, latText: la, lngText: lo };
+      const d = distM(c, ref);
+      if (d <= 30000 && (!best || d < best.d)) best = { c, d };
+    }));
+    return best ? { c: best.c, fixed: true, sure: true, from: `${oc.latText}, ${oc.lngText}` } : { c: null, fixed: false, sure: false, from: `${oc.latText}, ${oc.lngText}` };
+  }
+
+  function fileToImage(file) {
+    return new Promise((res, rej) => {
+      const url = URL.createObjectURL(file), im = new Image();
+      im.onload = () => { res(im); setTimeout(() => URL.revokeObjectURL(url), 1000); };
+      im.onerror = rej; im.src = url;
+    });
+  }
+  async function ocrCoords(file) {
+    const worker = await getOcr();
+    const im = await fileToImage(file);
+    const W = im.naturalWidth, H = im.naturalHeight;
+    // نجرب أعلى الصورة ثم أسفلها، بتنظيف للنص الأبيض أولاً ثم بدونه
+    const regions = [[0, 0, W, H * 0.45], [0, H * 0.55, W, H * 0.45]];
+    for (const clean of [true, false]) {
+      for (const [x, y, w, h] of regions) {
+        const k = 1400 / w;
+        const cv = document.createElement('canvas');
+        cv.width = 1400; cv.height = Math.round(h * k);
+        const ctx = cv.getContext('2d');
+        ctx.drawImage(im, x, y, w, h, 0, 0, cv.width, cv.height);
+        const id = ctx.getImageData(0, 0, cv.width, cv.height), px = id.data;
+        for (let i = 0; i < px.length; i += 4) {
+          const r = px[i], g = px[i + 1], b = px[i + 2];
+          let v;
+          if (clean) { const mx = Math.max(r, g, b), mn = Math.min(r, g, b); v = (mn > 200 && mx - mn < 40) ? 0 : 255; }
+          else v = 0.3 * r + 0.59 * g + 0.11 * b;
+          px[i] = px[i + 1] = px[i + 2] = v;
+        }
+        ctx.putImageData(id, 0, 0);
+        const { data } = await worker.recognize(cv);
+        const c = parseCoords(data.text || '');
+        if (c) return c;
+      }
+    }
+    return null;
+  }
+
+  function getHere() {
+    return new Promise((res, rej) => {
+      if (!navigator.geolocation) return rej(new Error('no geolocation'));
+      navigator.geolocation.getCurrentPosition(p => res(p.coords), rej, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    });
+  }
+
+  // صورة أو عدة صور من المعرض / تطبيق كاميرا
+  // الانتقال على الخريطة إلى مواقع الصور المضافة
+  function flyToPhotos(list) {
+    const ps = (list || []).filter(p => p && isFinite(p.lat) && isFinite(p.lng));
+    if (!ps.length) return;
+    if (ps.length === 1) map.setView([ps[0].lat, ps[0].lng], Math.max(map.getZoom(), 18));
+    else map.fitBounds(L.latLngBounds(ps.map(p => [p.lat, p.lng])).pad(0.25), { maxZoom: 18 });
+    const i = points.indexOf(ps[ps.length - 1]);
+    if (i >= 0 && photoMarkers[i]) setTimeout(() => photoMarkers[i].openPopup(), 350);
+    document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  async function fromFileInput(e) {
+    const input = e.target, files = [...input.files];
+    input.value = '';
+    if (!files.length) return;
+    const firstNew = points.length;
+    closeCamera();
+    statusEl.textContent = files.length > 1 ? `جاري قراءة ${files.length} صور...` : 'جاري قراءة الصورة...';
+
+    const items = [];
+    for (const f of files) {
+      let ex = null;
+      try { ex = readExif(await f.arrayBuffer()); } catch (_) {}
+      items.push({ f, ex, t: ex && ex.date ? ex.date.getTime() : f.lastModified });
+    }
+    items.sort((a, b) => a.t - b.t);   // ترتيب حسب وقت التصوير
+
+    const hasGps = it => it.ex && it.ex.lat !== undefined;
+    let here = null, hereTried = false;
+    const getHereOnce = async () => {
+      if (!hereTried) { hereTried = true; statusEl.textContent = 'صورة بلا إحداثيات — جاري أخذ موقعك الحالي...'; try { here = await getHere(); } catch (_) {} }
+      return here;
+    };
+
+    const batch = items.length > 1;
+    let fromText = 0, fromPhoto = 0, fromHere = 0, failed = 0, ocrDown = false;
+    const suspicious = [], fixedList = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const img = await resizeImage(it.f, 800);
+      const time = it.ex && it.ex.date ? it.ex.date.toLocaleString('ar-SA') : null;
+
+      // 1) الإحداثيات المكتوبة على الصورة
+      let oc = null;
+      if (!ocrDown) {
+        statusEl.textContent = `جاري قراءة الإحداثيات المكتوبة على الصورة ${batch ? (i + 1) + ' من ' + items.length : ''}... (أول مرة تأخذ وقتاً أطول)`;
+        try { oc = await ocrCoords(it.f); } catch (e) { ocrDown = true; }
+      }
+      // إذا كانت الصورة فيها موقع داخلي ويختلف كثيراً عن النص المقروء، فالقراءة غالباً خاطئة
+      if (oc && hasGps(it) && distM(oc, it.ex) > 500) oc = null;
+      // فحص المنطقية: مقارنة بآخر صورة، أو بموقعك الحالي إن لم توجد صور
+      let ocFix = null;
+      if (oc && !hasGps(it)) {
+        let ref = points.length ? points[points.length - 1] : null;
+        if (!ref) { const h = await getHereOnce(); if (h) ref = { lat: h.latitude, lng: h.longitude }; }
+        const rp = ocrRepair(oc, ref);
+        if (rp.fixed) { ocFix = rp.from; oc = rp.c; }
+        else if (!rp.sure) { suspicious.push(rp.from); oc = null; }   // قراءة غير منطقية لا تُستخدم
+      }
+
+      if (oc) {
+        await addPoint(img, { latitude: oc.lat, longitude: oc.lng, accuracy: null }, { time, src: ocFix ? 'ocrfix' : 'ocr', noPick: batch, latText: oc.latText, lngText: oc.lngText });
+        if (ocFix) { points[points.length - 1].ocrRaw = ocFix; fixedList.push(`${points[points.length - 1].name}: ${ocFix} ← ${ll(oc)}`); persist(); redraw(); }
+        fromText++;
+      } else if (hasGps(it)) {
+        // 2) الموقع المحفوظ داخل الصورة
+        await addPoint(img, { latitude: it.ex.lat, longitude: it.ex.lng, accuracy: it.ex.acc }, { time, src: 'exif', noPick: batch });
+        fromPhoto++;
+      } else if (await getHereOnce()) {
+        // 3) موقعك الحالي
+        await addPoint(img, here, { time, src: 'gps', noPick: batch });
+        fromHere++;
+      } else failed++;
+    }
+
+    const parts = [];
+    if (fromText) parts.push(`${fromText} من الإحداثيات المكتوبة على الصورة 📝`);
+    if (fromPhoto) parts.push(`${fromPhoto} من موقع التصوير داخل الصورة 📷`);
+    if (fromHere) parts.push(`${fromHere} من موقعك الحالي (الصورة بلا موقع)`);
+    if (failed) parts.push(`${failed} لم تُضف لتعذّر تحديد الموقع`);
+    if (ocrDown) parts.push('تعذّر تشغيل قارئ النص — تأكد من الإنترنت');
+    if (fixedList.length) parts.push(`🔧 صُحّحت قراءة: ${fixedList.join(' ، ')}`);
+    if (suspicious.length) parts.push(`⚠️ تجاهلت قراءة غير منطقية (${suspicious.join(' ، ')}) — تبعد أكثر من ${OCR_MAX_KM} كم؛ صحّحها من «✏️ تعديل»`);
+    statusEl.textContent = (batch ? `تمت إضافة الصور: ` : 'تمت الإضافة: ') + parts.join(' — ') +
+      (batch && autoPick.checked ? ' — حدّد الإحداثيات الثانية من الجدول.' : '');
+    flyToPhotos(points.slice(firstNew));   // الخريطة تنتقل إلى مواقع الصور المرفقة
+  }
+  cameraInput.onchange = fromFileInput;
+  document.getElementById('galleryInput').onchange = fromFileInput;
+
+  // ===== الكاميرا داخل الصفحة مع اختيار أي كاميرا في الجوال =====
+  const camModal = document.getElementById('camModal');
+  const camVideo = document.getElementById('camVideo');
+  const camShot = document.getElementById('camShot');
+  const camMsg = document.getElementById('camMsg');
+  const camList = document.getElementById('camList');
+  let camStream = null, cams = [], camId = getSetting('pm_cam', ''), shotData = null;
+
+  function camLabel(d, i) {
+    const l = (d.label || '').toLowerCase();
+    const front = /front|user|facing front|أمام/.test(l);
+    let name = front ? 'أمامية' : 'خلفية';
+    if (/ultra|wide angle|0\.5|واسع/.test(l)) name += ' واسعة جداً';
+    else if (/tele|zoom|تقريب/.test(l)) name += ' تقريب';
+    else if (/wide/.test(l) && !front) name += ' عادية';
+    if (/dual|triple/.test(l)) name += /triple/.test(l) ? ' ثلاثية' : ' مزدوجة';
+    const num = (d.label.match(/camera2?\s*(\d+)/i) || [])[1];
+    return `📷 ${name}${num !== undefined ? ' (' + num + ')' : ''}` || `كاميرا ${i + 1}`;
+  }
+
+  async function listCams() {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      cams = all.filter(d => d.kind === 'videoinput');
+    } catch (e) { cams = []; }
+    camList.innerHTML = '';
+    // ترقيم الأسماء المكررة
+    const seen = {};
+    cams.forEach((d, i) => {
+      let label = camLabel(d, i);
+      seen[label] = (seen[label] || 0) + 1;
+      if (seen[label] > 1) label += ' ' + seen[label];
+      const b = document.createElement('button');
+      b.textContent = label;
+      b.title = d.label || '';
+      b.classList.toggle('on', d.deviceId === camId);
+      b.onclick = () => startStream(d.deviceId);
+      camList.appendChild(b);
+    });
+    camList.style.display = cams.length > 1 ? 'flex' : 'none';
+    document.getElementById('camSwitch').style.visibility = cams.length > 1 ? 'visible' : 'hidden';
+  }
+
+  function stopStream() {
+    if (camStream) camStream.getTracks().forEach(t => t.stop());
+    camStream = null;
+  }
+
+  async function startStream(deviceId) {
+    stopStream();
+    camMsg.classList.remove('show');
+    const base = { width: { ideal: 1920 }, height: { ideal: 1080 } };
+    const tries = deviceId
+      ? [{ video: { ...base, deviceId: { exact: deviceId } } }, { video: { ...base, facingMode: { ideal: 'environment' } } }]
+      : [{ video: { ...base, facingMode: { ideal: 'environment' } } }, { video: true }];
+    for (const c of tries) {
+      try { camStream = await navigator.mediaDevices.getUserMedia({ ...c, audio: false }); break; } catch (e) { camStream = null; }
+    }
+    if (!camStream) {
+      camMsg.textContent = 'تعذّر تشغيل الكاميرا. اسمح للمتصفح باستخدام الكاميرا، أو اختر صورة من المعرض.';
+      camMsg.classList.add('show');
+      return false;
+    }
+    camVideo.srcObject = camStream;
+    try { await camVideo.play(); } catch (e) {}
+    const s = camStream.getVideoTracks()[0].getSettings();
+    camId = s.deviceId || deviceId || '';
+    setSetting('pm_cam', camId);
+    await listCams();   // أسماء الكاميرات تظهر بعد السماح بالكاميرا
+    return true;
+  }
+
+  async function openCamera() {
+    // متصفح قديم لا يدعم الكاميرا داخل الصفحة: نرجع لكاميرا الجوال العادية
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { cameraInput.click(); return; }
+    shotData = null;
+    camModal.classList.remove('review');
+    camModal.classList.add('open');
+    document.getElementById('camTitle').textContent = `التقاط النقطة ${letter(points.length)}`;
+    await startStream(camId);
+  }
+
+  function closeCamera() {
+    stopStream();
+    camModal.classList.remove('open', 'review');
+    camVideo.srcObject = null;
+  }
+
+  document.getElementById('camClose').onclick = closeCamera;
+  document.getElementById('camGallery').onclick = () => document.getElementById('galleryInput').click();
+  // فتح تطبيقات الكاميرا المثبتة في الجوال (يظهر للمستخدم قائمة يختار منها)
+  document.getElementById('camApps').onclick = () => {
+    closeCamera();            // نحرر الكاميرا حتى يستطيع التطبيق الآخر استخدامها
+    statusEl.textContent = 'اختر تطبيق الكاميرا، والتقط الصورة، ثم ارجع للصفحة.';
+    cameraInput.click();
+  };
+  document.getElementById('camSwitch').onclick = () => {
+    if (cams.length < 2) return;
+    const i = cams.findIndex(d => d.deviceId === camId);
+    startStream(cams[(i + 1) % cams.length].deviceId);
+  };
+
+  document.getElementById('camShutter').onclick = () => {
+    if (!camStream || !camVideo.videoWidth) return;
+    const w = camVideo.videoWidth, h = camVideo.videoHeight;
+    const k = Math.min(1, 800 / Math.max(w, h));
+    const cv = document.createElement('canvas');
+    cv.width = Math.round(w * k); cv.height = Math.round(h * k);
+    cv.getContext('2d').drawImage(camVideo, 0, 0, cv.width, cv.height);
+    shotData = cv.toDataURL('image/jpeg', 0.75);
+    camShot.src = shotData;
+    camModal.classList.add('review');
+    if (navigator.vibrate) navigator.vibrate(40);
+  };
+  document.getElementById('camRetake').onclick = () => { shotData = null; camModal.classList.remove('review'); };
+  document.getElementById('camUse').onclick = () => {
+    if (!shotData) return;
+    const data = shotData;
+    closeCamera();
+    locateAndAdd(data);
+  };
+
+  async function addPoint(imgData, c, opt = {}) {
+    const p = {
+      name: letter(points.length), img: imgData,
+      lat: +c.latitude.toFixed(6), lng: +c.longitude.toFixed(6),
+      acc: c.accuracy != null && isFinite(c.accuracy) ? Math.round(c.accuracy) : null,
+      time: opt.time || new Date().toLocaleString('ar-SA'), pick: null,
+      src: opt.src || 'gps'
+    };
+    if (opt.latText) { p.lat = +c.latitude; p.lng = +c.longitude; p.latText = opt.latText; p.lngText = opt.lngText; }
+    points.push(p);
+    if (points.length === 1) map.setView([p.lat, p.lng], 18);
+    redraw(true);
+    await persist();
+    statusEl.textContent = `تم حفظ النقطة ${p.name} ✔ ` +
+      (p.src === 'ocr' ? `(من نص الصورة: ${ll(p)})` : p.src === 'exif' ? '(الموقع من داخل الصورة)' : `(دقة ±${p.acc} م)`) +
+      (watchId === null ? ' — تنبيه: تتبع المشي متوقف، فلن تُحسب المسافة الممشاة.' : '');
+    onNewPhoto(points.length - 1);
+    svQueuePhoto(points.length - 1);   // مسح النظافة: تسجيل نوع وشدة الملاحظة (عند تشغيل الوضع فقط)
+    if (autoPick.checked && !opt.noPick) startPick(points.length - 1);
+  }
+  const SRC_TAG = { ocr: '📝 من نص الصورة', ocrfix: '📝 من نص الصورة (صُحّح رقم ضائع)', exif: '📷 من الصورة', edit: '✏️ معدّلة يدوياً' };
+  const accText = p => p.acc != null ? p.acc : ({ ocr: 'نص الصورة', ocrfix: 'نص الصورة (مصحّح)', exif: 'من الصورة', edit: 'يدوي' }[p.src] || '—');
+
+  // تعديل إحداثيات الصورة يدوياً (لتصحيح أي قراءة خاطئة)
+  // صورة تبعد أكثر من 50 كم عن كل الصور الأخرى = غالباً خطأ في القراءة
+  function farFromOthers(i) {
+    if (points.length < 2) return false;
+    const p = points[i];
+    // مع صورتين فقط لا نعرف أيهما الخطأ، فنُنبّه على المقروءة من النص
+    if (points.length === 2 && !['ocr', 'ocrfix'].includes(p.src)) return false;
+    return points.every((q, j) => j === i || distM(p, q) > OCR_MAX_KM * 1000);
+  }
+
+  async function editCoords(i) {
+    const p = points[i];
+    const before = ll(p);
+    if (p.obs && sv.approved && !svGuard(`تعديل إحداثية الصورة ${p.name}`, before, '(تُكتب بعد الإدخال)')) return;
+    const v = prompt(`إحداثيات النقطة ${p.name} (خط العرض، خط الطول):`, ll(p).replace(',', ''));
+    if (v === null) return;
+    const c = parseCoords(v.replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
+    const m = c || (() => { const n = v.match(/-?\d+(\.\d+)?/g); return n && n.length >= 2 && Math.abs(+n[0]) <= 90 && Math.abs(+n[1]) <= 180 ? { lat: +n[0], lng: +n[1], latText: n[0], lngText: n[1] } : null; })();
+    if (!m) { alert('اكتب الإحداثيتين بهذا الشكل: 21.2457513 40.36679293'); return; }
+    p.lat = m.lat; p.lng = m.lng; p.latText = m.latText; p.lngText = m.lngText; p.src = 'edit'; p.acc = null;
+    if (p.obs && sv.approved && sv.log.length) { sv.log[sv.log.length - 1].to = ll(p); svSave(); }
+    redraw(); await persist();
+    statusEl.textContent = `تم تعديل إحداثيات النقطة ${p.name} ✔`;
+  }
+
+  // ===== تحديد الإحداثية الثانية على الخريطة =====
+  function startPick(i) {
+    pickTarget = i;
+    map.closePopup();
+    document.body.classList.add('picking');
+    document.getElementById('pickText').textContent = `📍 اضغط على الخريطة لتحديد الإحداثية الثانية للنقطة ${points[i].name}`;
+    document.getElementById('pickBar').classList.add('show');
+    const p = points[i];
+    map.setView([p.lat, p.lng], Math.max(map.getZoom(), 18));
+  }
+  function stopPick() {
+    pickTarget = null;
+    document.body.classList.remove('picking');
+    document.getElementById('pickBar').classList.remove('show');
+  }
+  document.getElementById('pickCancel').onclick = stopPick;
+
+  map.on('click', async e => {
+    if (pickTarget === null) return;
+    const p = points[pickTarget];
+    p.pick = { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) };
+    stopPick();
+    redraw();
+    await persist();
+    statusEl.textContent = `تم تحديد ${pickName(p)} — تبعد ${fmtLen(pairDist(p))} عن ${p.name} ✔`;
+  });
+
+  async function removePick(i) {
+    points[i].pick = null;
+    redraw(); await persist();
+    statusEl.textContent = `تم حذف الإحداثية المحددة للنقطة ${points[i].name}.`;
+  }
+
+  // ===== الرسم =====
+  function fitAll() {
+    const all = [...photoCoords(), ...pickedCoords(), ...track].map(c => [c.lat, c.lng]);
+    if (all.length >= 2) map.fitBounds(L.latLngBounds(all).pad(0.2));
+    else if (all.length === 1) map.setView(all[0], 18);
+  }
+
+  function redraw(fit) {
+    const pc = photoCoords().map(c => [c.lat, c.lng]);
+    if (isClosed() && pc.length >= 3) { shape.setLatLngs(pc); line.setLatLngs([]); }
+    else { shape.setLatLngs([]); line.setLatLngs(pc); }
+
+    const hasPick = pickedCount() > 0;
+    const kc = pickedCoords().map(c => [c.lat, c.lng]);
+    if (hasPick && isClosed() && kc.length >= 3) { pickShape.setLatLngs(kc); pickLine.setLatLngs([]); }
+    else if (hasPick) { pickShape.setLatLngs([]); pickLine.setLatLngs(kc); }
+    else { pickShape.setLatLngs([]); pickLine.setLatLngs([]); }
+
+    // العلامات
+    layer.clearLayers();
+    photoMarkers = [];
+    points.forEach((p, i) => {
+      const icon = L.divIcon({ className: '', html: `<div class="letter-icon">${p.name}</div>`, iconSize: [34, 34], iconAnchor: [17, 17] });
+      const m = L.marker([p.lat, p.lng], { icon }).addTo(layer);
+      const box = document.createElement('div');
+      box.className = 'popup-box';
+      box.innerHTML = `<img src="${p.img}"><b>النقطة ${p.name}</b><br><span dir="ltr">${ll(p)}</span><br><small>${p.time}</small>
+        ${p.pick ? `<br><small style="color:#e65100">${pickName(p)}: <span dir="ltr">${ll(p.pick)}</span> — ${fmtLen(pairDist(p))}</small>` : ''}<br>`;
+      const btn = document.createElement('button');
+      btn.textContent = p.pick ? '📍 تغيير الإحداثية الثانية' : '📍 تحديد إحداثية ثانية';
+      btn.onclick = () => startPick(i);
+      box.appendChild(btn);
+      m.bindPopup(box, { maxWidth: 210 });
+      photoMarkers.push(m);
+
+      if (p.pick) {
+        const picon = L.divIcon({ className: '', html: `<div class="pick-icon">${pickName(p)}</div>`, iconSize: [34, 26], iconAnchor: [17, 13] });
+        const pm = L.marker([p.pick.lat, p.pick.lng], { icon: picon, draggable: true }).addTo(layer);
+        pm.bindTooltip('اسحب لتعديل الموقع', { direction: 'top' });
+        pm.on('dragend', async ev => {
+          const q = ev.target.getLatLng();
+          p.pick = { lat: +q.lat.toFixed(6), lng: +q.lng.toFixed(6) };
+          redraw(); await persist();
+        });
+        L.polyline([[p.lat, p.lng], [p.pick.lat, p.pick.lng]], { color: '#fff', weight: 2, dashArray: '4 5' })
+          .addTo(layer)
+          .bindTooltip(fmtLen(pairDist(p)), { permanent: true, direction: 'center', className: 'dist-tip' });
+      }
+    });
+
+    if (fit) fitAll();
+
+    // الجدول
+    const tbody = document.querySelector('#pointsTable tbody');
+    tbody.innerHTML = '';
+    let sumD = 0;
+    const selRank = new Map(selectedPhotos().map((q, k) => [q, k + 1]));
+    points.forEach((p, i) => {
+      const d = pairDist(p);
+      if (d !== null) sumD += d;
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><b>${p.name}</b><br><label class="ar-chk" title="ضمن شكل مساحة الصور فقط (لا يؤثر على نسبة المسافات)"><input type="checkbox" class="ar-in" ${p.inArea !== false ? 'checked' : ''}> مساحة ${selRank.get(p) || ''}</label></td>
+        <td><img src="${p.img}"></td>
+        <td><span class="ll">${ll(p)}</span>${farFromOthers(i) ? '<br><small style="color:#c62828;font-weight:bold">⚠️ بعيدة جداً عن باقي الصور — تحقّق من الإحداثية</small>' : ''}${SRC_TAG[p.src] ? `<br><small style="color:#2e7d32">${SRC_TAG[p.src]}</small>` : ''}<br><button class="mini btn-del edit-c" style="color:#1f4e79">✏️ تعديل</button></td>
+        <td>${p.pick ? `<span class="ll pk">${ll(p.pick)}</span><br>` : ''}</td>
+        <td>${d !== null ? `<span class="dist">${fmtLen(d)}</span>` : '—'}</td>
+        <td><small>${p.time}</small></td>`;
+      const chk = tr.querySelector('.ar-in');
+      chk.onclick = ev => ev.stopPropagation();
+      chk.onchange = async () => {
+        p.inArea = chk.checked;
+        if (chk.checked) { p.selOrder = 1e6 + (++selSeq); setSetting('pm_selseq', String(selSeq)); }   // يُضاف في آخر الترتيب
+        else delete p.selOrder;
+        await persist();
+        redraw();   // يعيد ترقيم الترتيب ويحسب النسب فوراً
+      };
+      tr.querySelector('.edit-c').onclick = ev => { ev.stopPropagation(); editCoords(i); };
+      const cell = tr.children[3];
+      const b1 = document.createElement('button');
+      b1.className = 'mini btn-pick';
+      b1.textContent = p.pick ? '📍 تغيير' : '📍 تحديد';
+      b1.onclick = ev => { ev.stopPropagation(); startPick(i); };
+      cell.appendChild(b1);
+      if (p.pick) {
+        const b2 = document.createElement('button');
+        b2.className = 'mini btn-del'; b2.textContent = '✖';
+        b2.onclick = ev => { ev.stopPropagation(); removePick(i); };
+        cell.appendChild(b2);
+      }
+      tr.onclick = () => { map.setView([p.lat, p.lng], 19); photoMarkers[i].openPopup(); };
+      tbody.appendChild(tr);
+    });
+
+    const n = pickedCount();
+    const sp = specStats();
+    document.querySelector('#pointsTable tfoot').innerHTML = n ? `
+      <tr><td colspan="4">عدد الإحداثيات المحددة: ${n} من ${points.length}</td>
+      <td colspan="2">متوسط المسافة: ${fmtLen(sp.dist / n)}</td></tr>
+      <tr><td colspan="4">${sp.label}</td><td colspan="2">${fmtLen(sp.dist)}</td></tr>` : '';
+
+    undoBtn.disabled = points.length === 0;
+    pdfBtn.disabled = points.length === 0 && !fs.pts.length;
+    updateSummary();
+    fillCenters();
+    arRefresh(false);   // تحديث نسب الصور فور إضافة أو حذف أو تحديد صورة
+    svSchedule();
+  }
+
+  // تفصيل الجمع لعرضه تحت الرقم، مثل: A 33.2 + B 42.8
+  function sumBreakdown() {
+    const c = points.filter(p => p.pick);
+    const parts = c.slice(0, 6).map(p => `${p.name} ${pairDist(p).toFixed(1)}`);
+    return `${c.length} نقاط مختارة: ` + parts.join(' + ') + (c.length > 6 ? ' + …' : '') + ' م';
+  }
+
+  function updateSummary() {
+    const box = document.getElementById('summary');
+    if (!points.length && !track.length && !perimMode && !ar && !fs.pts.length) { box.classList.remove('show'); return; }
+    box.classList.add('show');
+    const s = specStats();
+    if (perimMode) {
+      const P = enteredPerim(), k = perimCalc(P);
+      document.getElementById('sWalkLabel').textContent = 'طول المحيط المُدخل';
+      document.getElementById('sWalk').textContent = fmtLenC(P);
+      document.getElementById('sWalkSub').textContent = `المساحة التقديرية (دائرة): ${fmtM2(k.area)}`;
+    } else {
+      const w = walkedDist(), ts = trackShape();
+      document.getElementById('sWalkLabel').textContent = 'إجمالي المسافة الممشاة';
+      document.getElementById('sWalk').textContent = w > 0 ? fmtLen(w) : '—';
+      document.getElementById('sWalkSub').textContent = `${track.length} نقطة GPS مقبولة، ${rejected} مستبعدة` +
+        (ts ? ` — محيط المسار المغلق: ${fmtLen(ts.perim)} — المساحة المغلقة: ${fmtArea(ts.area)}` : '');
+    }
+    document.getElementById('sSpecLabel').textContent = s.label;
+    document.getElementById('sSpec').textContent = s.dist !== null ? fmtLen(s.dist) : '—';
+    document.getElementById('sSpecSub').textContent =
+      s.dist === null ? 'حدّد نقطة واحدة على الأقل' : sumBreakdown();
+    const ap = document.getElementById('sAreaPct');
+    ap.textContent = !ar ? 'اضغط بطاقة «أنت قطعت»' : (ar.pct != null ? fmtPct(ar.pct) : ar.err);
+    ap.classList.toggle('msg', !ar || ar.pct == null);
+    const pr = photoDistRatio(), pe2 = document.getElementById('sPdPct');
+    pe2.textContent = pr.text; pe2.classList.toggle('msg', !pr.ok);
+    const sg = document.getElementById('sGpsPct');
+    if (calcMethod === 'points') { const g = gpsPointsRatio(); sg.textContent = g.text; sg.classList.toggle('msg', !g.ok); }
+  }
+
+  function resizeImage(file, maxSize) {
+    return new Promise(resolve => {
+      const r = new FileReader();
+      r.onload = ev => {
+        const img = new Image();
+        img.onload = () => {
+          const k = Math.min(1, maxSize / Math.max(img.width, img.height));
+          const cv = document.createElement('canvas');
+          cv.width = img.width * k; cv.height = img.height * k;
+          cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+          resolve(cv.toDataURL('image/jpeg', 0.75));
+        };
+        img.src = ev.target.result;
+      };
+      r.readAsDataURL(file);
+    });
+  }
+
+  // ===== صورة الخريطة للطباعة =====
+  const TILE_IMG = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/';
+  const TILE_LBL = 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/';
+  function loadImg(src) {
+    return new Promise(res => {
+      const im = new Image();
+      im.crossOrigin = 'anonymous';
+      im.onload = () => res(im);
+      im.onerror = () => res(null);
+      im.src = src;
+    });
+  }
+  function project(lat, lng, z) {
+    const s = 256 * Math.pow(2, z), r = lat * Math.PI / 180;
+    return [(lng + 180) / 360 * s, (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * s];
+  }
+  function drawPath(ctx, pts, closed) {
+    ctx.beginPath();
+    pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
+    if (closed && pts.length >= 3) ctx.closePath();
+  }
+  async function mapImage() {
+    const W = 1400, H = 900;
+    const all = [...photoCoords(), ...pickedCoords(), ...track];
+    all.push(...fs.pts);
+    if (ar) all.push(...ar.pts);
+    if (sv.on && sv.boundary.length >= 3) all.push(...sv.boundary);
+    if (!all.length) return null;
+    const circ = circleLayer && circleState.center ? circleState : null;
+    if (circ) {
+      const { lat, lng } = circ.center, dLat = circ.radius / 111320, dLng = circ.radius / (111320 * Math.cos(lat * Math.PI / 180));
+      all.push({ lat: lat + dLat, lng }, { lat: lat - dLat, lng }, { lat, lng: lng + dLng }, { lat, lng: lng - dLng });
+    }
+    let z = 19;
+    for (; z > 2; z--) {
+      const xy = all.map(p => project(p.lat, p.lng, z));
+      const w = Math.max(...xy.map(a => a[0])) - Math.min(...xy.map(a => a[0]));
+      const h = Math.max(...xy.map(a => a[1])) - Math.min(...xy.map(a => a[1]));
+      if (w * 1.3 <= W && h * 1.3 <= H) break;
+    }
+    const axy = all.map(p => project(p.lat, p.lng, z));
+    const cx = (Math.max(...axy.map(a => a[0])) + Math.min(...axy.map(a => a[0]))) / 2;
+    const cy = (Math.max(...axy.map(a => a[1])) + Math.min(...axy.map(a => a[1]))) / 2;
+    const ox = cx - W / 2, oy = cy - H / 2;
+    const toPx = c => { const [x, y] = project(c.lat, c.lng, z); return [x - ox, y - oy]; };
+
+    const cv = document.createElement('canvas');
+    cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = '#ddd'; ctx.fillRect(0, 0, W, H);
+
+    const jobs = [];
+    for (let tx = Math.floor(ox / 256); tx <= Math.floor((ox + W) / 256); tx++)
+      for (let ty = Math.floor(oy / 256); ty <= Math.floor((oy + H) / 256); ty++)
+        jobs.push(Promise.all([loadImg(`${TILE_IMG}${z}/${ty}/${tx}`), loadImg(`${TILE_LBL}${z}/${ty}/${tx}`)])
+          .then(([a, b]) => ({ tx, ty, a, b })));
+    for (const { tx, ty, a, b } of await Promise.all(jobs)) {
+      if (a) ctx.drawImage(a, tx * 256 - ox, ty * 256 - oy);
+      if (b) ctx.drawImage(b, tx * 256 - ox, ty * 256 - oy);
+    }
+
+    // دائرة المحيط حول M (بنفسجي)
+    if (circ) {
+      const [mx, my] = toPx(circ.center);
+      const mpp = 156543.03392 * Math.cos(circ.center.lat * Math.PI / 180) / Math.pow(2, z);
+      ctx.beginPath(); ctx.arc(mx, my, circ.radius / mpp, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(206,147,216,.22)'; ctx.fill();
+      ctx.setLineDash([]); ctx.strokeStyle = '#8e24aa'; ctx.lineWidth = 6; ctx.stroke();
+      // علامة M فوق المركز مباشرة حتى لا تغطيها علامة الصورة
+      ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx, my - 30); ctx.strokeStyle = '#8e24aa'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.beginPath(); ctx.arc(mx, my - 50, 20, 0, Math.PI * 2);
+      ctx.fillStyle = '#8e24aa'; ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('M', mx, my - 49);
+    }
+
+    // المساحة والنسبة: مسار المستخدم المغلق (أخضر) وشكل الصور المحددة (أزرق)
+    if (ar) {
+      const rp = ar.pts.map(toPx);
+      drawPath(ctx, rp, true); ctx.fillStyle = 'rgba(67,160,71,.25)'; ctx.fill();
+      ctx.setLineDash([]); ctx.strokeStyle = '#2e7d32'; ctx.lineWidth = 9; ctx.lineJoin = 'round'; ctx.stroke();
+      if (ar.img && ar.img.coords) {
+        const ip = ar.img.coords.map(c => toPx({ lat: c[0], lng: c[1] }));
+        drawPath(ctx, ip, true); ctx.fillStyle = 'rgba(30,136,229,.3)'; ctx.fill();
+        ctx.strokeStyle = '#1565c0'; ctx.lineWidth = 5; ctx.stroke();
+      }
+      const lbl = (c, t, bg, fg, dy) => {
+        const [x, y] = toPx(c); ctx.font = 'bold 18px Arial'; const w = ctx.measureText(t).width + 14;
+        ctx.fillStyle = bg; ctx.strokeStyle = fg; ctx.lineWidth = 3; ctx.beginPath(); ctx.rect(x - w / 2, y + dy, w, 26); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = fg; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, x, y + dy + 13);
+        ctx.beginPath(); ctx.arc(x, y, 7, 0, Math.PI * 2); ctx.fillStyle = '#000'; ctx.fill();
+      };
+      lbl(ar.pts[0], 'START', '#fff', '#000', -42);
+      lbl(ar.pts[ar.pts.length - 1], 'END', '#000', '#fff', 14);
+    }
+
+    // مسح النظافة: حدود الحي (برتقالي متقطع) وتلوين القطاعات حسب حالتها
+    if (sv.on) {
+      if (sv.boundary.length >= 3) {
+        drawPath(ctx, sv.boundary.map(toPx), true);
+        ctx.fillStyle = 'rgba(239,108,0,.06)'; ctx.fill();
+        ctx.setLineDash([14, 10]); ctx.strokeStyle = '#ef6c00'; ctx.lineWidth = 5; ctx.stroke(); ctx.setLineDash([]);
+      }
+      const sr = svCompute(), cols = ['#2e7d32', '#f9a825', '#ef6c00', '#c62828'];
+      sr.pairs.forEach(pr => {
+        if (!sr.nSeg) return;
+        const seg = Math.max(0, Math.min(sr.nSeg - 1, Math.floor(((pr.from + pr.to) / 2) / sr.L)));
+        const [x1, y1] = toPx(pr.a), [x2, y2] = toPx(pr.b);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2);
+        ctx.strokeStyle = cols[sr.segs[seg].cls]; ctx.lineWidth = 10; ctx.lineCap = 'round'; ctx.stroke();
+      });
+    }
+
+    // المحيط الميداني (أزرق للمشي، أخضر للسيارة)
+    if (fs.pts.length >= 2) {
+      const st = FS_STYLE[fs.type], fp = fs.pts.map(toPx);
+      drawPath(ctx, fp, fs.state === 'closed');
+      if (fs.state === 'closed' && fp.length >= 3) { ctx.fillStyle = st.fill + '40'; ctx.fill(); }
+      ctx.setLineDash([]); ctx.strokeStyle = st.color; ctx.lineWidth = st.weight; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+      const [sx, sy] = fp[0];
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.rect(sx - 38, sy - 44, 76, 28); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#000'; ctx.font = 'bold 18px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('START', sx, sy - 29);
+      ctx.beginPath(); ctx.arc(sx, sy, 7, 0, Math.PI * 2); ctx.fillStyle = '#000'; ctx.fill();
+    }
+
+    // مسار المشي (أخضر)
+    if (track.length >= 2) {
+      drawPath(ctx, track.map(toPx), false);
+      ctx.setLineDash([]); ctx.strokeStyle = '#00e676'; ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.stroke();
+    }
+
+    const closed = isClosed();
+    const pp = points.map(p => toPx(p));
+    // الشكل الأزرق (الصور)
+    drawPath(ctx, pp, closed);
+    if (closed && pp.length >= 3) { ctx.fillStyle = 'rgba(59,59,255,.15)'; ctx.fill(); }
+    ctx.setLineDash([]); ctx.strokeStyle = '#3b3bff'; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+
+    // الشكل البرتقالي (المحدد)
+    if (pickedCount()) {
+      const kp = pickedCoords().map(toPx);
+      drawPath(ctx, kp, closed);
+      if (closed && kp.length >= 3) { ctx.fillStyle = 'rgba(239,108,0,.2)'; ctx.fill(); }
+      ctx.setLineDash([16, 10]); ctx.strokeStyle = '#ef6c00'; ctx.lineWidth = 5; ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    // خطوط الربط بين النقطة وإحداثيتها
+    points.forEach((p, i) => {
+      if (!p.pick) return;
+      const [x2, y2] = toPx(p.pick);
+      ctx.beginPath(); ctx.moveTo(pp[i][0], pp[i][1]); ctx.lineTo(x2, y2);
+      ctx.setLineDash([6, 6]); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); ctx.setLineDash([]);
+    });
+
+    let minD = Infinity;
+    for (let i = 0; i < pp.length; i++) for (let j = i + 1; j < pp.length; j++)
+      minD = Math.min(minD, Math.hypot(pp[i][0] - pp[j][0], pp[i][1] - pp[j][1]));
+    const rad = Math.max(12, Math.min(22, minD / 2 - 1));
+
+    // علامات المحدد
+    points.forEach(p => {
+      if (!p.pick) return;
+      const [x, y] = toPx(p.pick);
+      const w = rad * 2.2, h = rad * 1.6;
+      ctx.fillStyle = '#ef6c00'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.rect(x - w / 2, y - h / 2, w, h); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(rad * 0.8)}px Arial`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(pickName(p), x, y + 1);
+    });
+    // علامات الصور
+    pp.forEach(([x, y], i) => {
+      ctx.beginPath(); ctx.arc(x, y, rad, 0, Math.PI * 2);
+      ctx.fillStyle = '#fff'; ctx.fill(); ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.stroke();
+      const name = points[i].name;
+      ctx.fillStyle = '#000'; ctx.font = `bold ${Math.round(rad * (name.length > 1 ? 0.8 : 1))}px Arial`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(name, x, y + 1);
+    });
+
+    // بوصلة: الصورة مرسومة بإسقاط الخريطة نفسه، فالشمال دائماً أعلى الصورة
+    ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.rect(18, 14, 64, 78); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#b71c1c'; ctx.font = 'bold 30px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('N', 50, 36);
+    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.moveTo(50, 52); ctx.lineTo(62, 82); ctx.lineTo(50, 74); ctx.lineTo(38, 82); ctx.closePath(); ctx.fill();
+    ctx.font = '14px Arial'; ctx.textAlign = 'left'; ctx.fillText('Imagery © Esri', 10, H - 12);
+
+    try { return cv.toDataURL('image/jpeg', 0.9); }
+    catch (e) { return null; }
+  }
+
+  // ===== تصدير PDF =====
+  pdfBtn.onclick = async () => {
+    // تصدير PDF كما كان في البداية: الخريطة + جدول الإحداثيات + صفحات الصور (20 صورة لكل صفحة)، مع اسم الحي
+    stopPick();
+    pdfBtn.disabled = true;
+    try {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageW = 210, pageH = 297, margin = 10;
+      const report = document.getElementById('report');
+      const pages = [];
+      const district = sv.info.district ? esc(sv.info.district) : '';
+
+      const row = p => {
+        const d = p.pick ? fmtLen(pairDist(p)) : '—';
+        return `<tr><td><b>${p.name}</b></td><td dir="ltr">${ll(p)}</td><td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
+      };
+      const head = `<thead><tr><th>النقطة</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
+
+      statusEl.textContent = 'جاري تحميل صورة الخريطة...';
+      const mapImg = await mapImage();
+      statusEl.textContent = 'جاري إنشاء ملف PDF...';
+      const firstRows = 12, nextRows = 34;
+      pages.push(`
+        <h2>جدول إحداثيات النقاط${district ? ' — ' + district : ''}</h2>
+        <div class="meta">${district ? 'الحي: <b>' + district + '</b> — ' : ''}عدد النقاط: ${points.length}<br>تاريخ التقرير: ${new Date().toLocaleString('ar-SA')}</div>
+        <div class="shape">${mapImg ? `<img src="${mapImg}" style="width:100%;border-radius:6px;border:1px solid #ccd">` : ''}</div>
+        <table>${head}<tbody>${points.slice(0, firstRows).map(row).join('')}</tbody></table>`);
+      for (let i = firstRows; i < points.length; i += nextRows)
+        pages.push(`<table>${head}<tbody>${points.slice(i, i + nextRows).map(row).join('')}</tbody></table>`);
+
+      // صفحات الصور: 20 صورة في كل صفحة مع الإحداثيات والوقت
+      const perPage = 20, totalPhotoPages = Math.ceil(points.length / perPage);
+      for (let i = 0; i < points.length; i += perPage) {
+        pages.push(`
+          <h2>صور النقاط${district ? ' — ' + district : ''} (${i / perPage + 1} / ${totalPhotoPages})</h2>
+          <div class="grid">${points.slice(i, i + perPage).map(p => `
+            <div class="card">
+              <img src="${p.img}">
+              <b>${p.name}</b>
+              <div class="c">${ll(p)}</div>
+              ${p.pick ? `<div class="o">${pickName(p)} ${ll(p.pick)} — ${fmtLen(pairDist(p))}</div>` : ''}
+              <div>${p.time}</div>
+            </div>`).join('')}
+          </div>`);
+      }
+
+      report.classList.add('on');
+      for (let c = 0; c < pages.length; c++) {
+        statusEl.textContent = `جاري إنشاء الصفحة ${c + 1} من ${pages.length}...`;
+        report.innerHTML = pages[c];
+        const canvas = await html2canvas(report, { scale: 2, backgroundColor: '#ffffff', windowWidth: 900, scrollX: 0, scrollY: 0 });
+        const w = pageW - margin * 2;
+        const h = Math.min(canvas.height * w / canvas.width, pageH - margin * 2);
+        if (c > 0) pdf.addPage();
+        pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', margin, margin, w, h);
+      }
+      pdf.save('إحداثيات_النقاط.pdf');
+      statusEl.textContent = 'تم تصدير ملف PDF ✔';
+    } catch (e) {
+      statusEl.textContent = 'حدث خطأ أثناء التصدير: ' + e.message;
+    }
+    report.innerHTML = '';
+    report.classList.remove('on');
+    pdfBtn.disabled = points.length === 0 && !fs.pts.length;
+  };
+
+  // ===== تراجع ومسح =====
+  undoBtn.onclick = async () => {
+    if (!points.length) return;
+    stopPick();
+    const last = points[points.length - 1];
+    if (!last.pick && last.obs && sv.approved && !svGuard(`حذف صورة الملاحظة ${last.name}`, last.obs.type + ' — ' + SEV_LABEL[last.obs.sev], 'محذوفة')) return;
+    if (last.pick) last.pick = null; else points.pop();
+    redraw(); await persist();
+    statusEl.textContent = 'تم التراجع عن آخر خطوة.';
+  };
+
+  document.getElementById('clearBtn').onclick = async () => {
+    if ((!points.length && !track.length) || !confirm('مسح جميع النقاط والصور ومسار المشي نهائياً؟')) return;
+    if (points.some(p => p.obs) && sv.approved && !svGuard('مسح جميع الصور والملاحظات', points.filter(p => p.obs).length + ' ملاحظة', 'محذوفة')) return;
+    stopPick();
+    stopTrack();
+    points = []; track = []; rejected = 0; trackBad = [];
+    trackLine.setLatLngs([]);
+    trackBtn.textContent = '🚶 بدء تتبع المشي';
+    redraw(); await persist(); await persistTrack();
+    updateTrackInfo();
+    arClearRoute('walk');
+    statusEl.textContent = 'تم المسح.';
+  };
+
+  // ===== البدء =====
+  applyView();
+  applyShape();
+  (async () => {
+    const st = await DB.load('track', { track: [], rejected: 0 });
+    track = Array.isArray(st.track) ? st.track : [];
+    trackBad = Array.isArray(st.bad) ? st.bad : [];
+    rejected = st.rejected || 0;
+    trackLine.setLatLngs(track.map(c => [c.lat, c.lng]));
+    if (track.length) trackBtn.textContent = '🚶 متابعة تتبع المشي';
+    updateTrackInfo();
+    updateSummary();
+    const saved = await DB.load();
+    if (saved.length) {
+      points = saved.map(p => ({ pick: null, ...p }));
+      redraw(true);
+      statusEl.textContent = `تم استرجاع ${points.length} نقطة محفوظة ✔`;
+    }
+    await fsRestore();
+    await arRestore();
+    await svRestore();
+    // خانة «طول المحيط بالمتر» محذوفة من الواجهة، فلا نُبقي قيمتها القديمة فعّالة
+    setSetting('pm_perim', '');
+    // استرجاع وضع الحساب (محيط مُدخل أو تتبع المشي)
+    const savedPerim = getSetting('pm_perim', '');
+    if (savedPerim) { perimInput.value = savedPerim; await applyPerimeter(); } else updateModeUI();
+    // استرجاع آخر دائرة محيط
+    if (circleState.value) ccValue.value = circleState.value;
+    if (circleState.mode) { const r = document.querySelector(`input[name="ccMode"][value="${circleState.mode}"]`); if (r) r.checked = true; }
+    fillCenters(circleState.centerKey);
+    updateCcTitle();
+    if (circleState.shown && parseKm(ccValue.value)) { ccCard.classList.add('open'); drawCircle({ useCache: true }); }
+    if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+  })();
+</script>
+</body>
+</html>
