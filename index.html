@@ -158,6 +158,15 @@
   .sv-segs span { width: 22px; height: 22px; border-radius: 4px; font-size: 10px; display: flex; align-items: center; justify-content: center; color: #fff; font-family: Arial; }
   .sv-c0 { background: #2e7d32; } .sv-c1 { background: #f9a825; } .sv-c2 { background: #ef6c00; } .sv-c3 { background: #c62828; }
   .sv-warn { background: #fff8e1; color: #6d4c00; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; line-height: 1.7; margin-top: 8px; }
+  .sv-err { background: #ffebee; color: #b71c1c; font-weight: bold; border-radius: 8px; padding: 8px 10px; margin-top: 6px; font-size: 13px; line-height: 1.6; }
+  .sv-err[hidden] { display: none; }
+  .sv-bad { border-color: #c62828 !important; background: #fff5f5 !important; }
+  .sv-whole { margin-top: 8px; background: #fff3e0; font-weight: normal; font-size: 13.5px; }
+  .d-del { background: #fdecea; color: #b00020; padding: 6px 10px; font-size: 13px; }
+  .sv-dedtbl { margin-top: 6px; background: #fff; }
+  .sv-dedtbl td { font-size: 13px; text-align: right; line-height: 1.6; }
+  .sv-dedtbl td:first-child { width: 42%; color: #37474f; }
+  .sv-fixed-warn { margin-top: 8px; background: #fff8e1; color: #6d4c00; border: 1px solid #ffe082; border-radius: 8px; padding: 8px 10px; font-size: 12.5px; font-weight: bold; line-height: 1.7; }
   .sv-ded-res { background: #ede7f6; color: #311b92; border-radius: 8px; padding: 8px 10px; margin-top: 8px; line-height: 1.8; }
   #svObsList select, #svObsList input { font-size: 13px; padding: 4px; border: 1px solid #b0bec5; border-radius: 6px; max-width: 150px; }
   #svObsList img { width: 48px; height: 36px; object-fit: cover; border-radius: 4px; }
@@ -360,6 +369,9 @@
   #report .card b { font-size: 14px; color: #1f4e79; font-family: Arial; }
   #report .card .c { direction: ltr; font-family: Arial; }
   #report .card .o { direction: ltr; font-family: Arial; color: #e65100; }
+  #report .sv-ded-res { background: #f5f3fb; border: 1px solid #d1c4e9; border-radius: 6px; padding: 8px; font-size: 12.5px; }
+  #report .sv-dedtbl td { font-size: 12.5px; padding: 5px 6px; }
+  #report .sv-fixed-warn { font-size: 12px; }
 </style>
 </head>
 <body>
@@ -420,7 +432,7 @@
 </div>
 
 <div id="svTop">
-  <div class="prev"><small>نسبة انتشار تدني النظافة</small><b id="svTopPrev">—</b><em id="svTopPrevEq"></em></div>
+  <div class="prev"><small>نسبة ملاحظات تدني النظافة</small><b id="svTopPrev">—</b><em id="svTopPrevEq"></em></div>
   <div class="sevi"><small>مؤشر شدة التدني</small><b id="svTopSev">—</b><em id="svTopSevEq"></em></div>
 </div>
 
@@ -545,7 +557,7 @@
       <label>تراكم كبير / نقطة سوداء<input id="svW4" type="number" inputmode="decimal" min="0" value="5"></label>
       <label>تدنٍ خفيف حتى (نقطة)<input id="svT1" type="number" inputmode="decimal" min="0" value="2"></label>
       <label>تدنٍ متوسط حتى (نقطة)<input id="svT2" type="number" inputmode="decimal" min="0" value="5"></label>
-      <label>القطاع «متدني النظافة» إذا تجاوزت نقاطه<input id="svDeg" type="number" inputmode="decimal" min="0" value="0"></label>
+      <label hidden>القطاع «متدني النظافة» إذا تجاوزت نقاطه<input id="svDeg" type="number" inputmode="decimal" min="0" value="0"></label>
       <label>أقصى نقاط محتسبة للقطاع (لمؤشر الشدة)<input id="svCap" type="number" inputmode="decimal" min="1" value="10"></label>
     </div>
     <div class="sv-note">0 نقطة = نظيف. أكثر من «تدنٍ متوسط حتى» = تدنٍ شديد.</div>
@@ -553,12 +565,16 @@
 
   <details class="sv-sec"><summary>4. جدول الخصم المعتمد في العقد (اختياري)</summary>
     <div class="sv-grid">
-      <label class="sv-wide">بند العقد المستخدم<input id="svClause" type="text" autocomplete="off" placeholder="مثال: البند 12 — جدول الجزاءات"></label>
-      <label>قيمة المستخلص (اختياري)<input id="svValue" type="number" inputmode="decimal" min="0" placeholder="ريال"></label>
+      <label>إجمالي قيمة المستخلص الشهري (ر.س)<input id="svValue" type="number" inputmode="decimal" min="0" step="0.01" placeholder="مثال: 2000000"></label>
+      <label>اسم البند محل التقييم<input id="svItemName" type="text" autocomplete="off" placeholder="مثال: بند النظافة العامة"></label>
+      <label>قيمة البند محل التقييم (ر.س)<input id="svItemValue" type="number" inputmode="decimal" min="0" step="0.01" placeholder="مثال: 500000"></label>
+      <label>رقم أو اسم بند الجزاءات في العقد<input id="svClause" type="text" autocomplete="off" placeholder="مثال: البند 12 — جدول الجزاءات"></label>
     </div>
-    <div class="sv-note">أدخل شرائح نسبة انتشار التدني ونسبة الخصم المقابلة لها كما في العقد:</div>
-    <table class="sv-ded"><thead><tr><th>من %</th><th>إلى %</th><th>الخصم %</th></tr></thead><tbody id="svDedRows"></tbody></table>
-    <div class="sv-btns"><button type="button" id="svDedAdd">＋ شريحة</button><button type="button" id="svDedDel">－ آخر شريحة</button></div>
+    <div id="svDedErr" class="sv-err" hidden></div>
+    <div class="sv-note">شرائح نسبة ملاحظات تدني النظافة ونسبة الخصم المعتمدة لكل شريحة كما في العقد:</div>
+    <div class="sv-tbl-wrap"><table class="sv-ded"><thead><tr><th>نسبة الملاحظات من %</th><th>نسبة الملاحظات إلى %</th><th>نسبة الخصم المعتمدة %</th><th></th></tr></thead><tbody id="svDedRows"></tbody></table></div>
+    <div class="sv-btns"><button type="button" id="svDedAdd">＋ إضافة شريحة</button><button type="button" id="svDedDel">－ حذف آخر شريحة</button></div>
+    <label class="sv-switch sv-whole"><input type="checkbox" id="svWhole"> احتساب الخصم من كامل المستخلص (الأصل: من قيمة البند محل التقييم فقط)</label>
   </details>
 
   <div class="sv-btns sv-main">
@@ -1870,7 +1886,7 @@
     on: false, info: { district: '', contractor: '', contract: '', inspector: '', start: '', end: '', kind: 'car' },
     segLen: 100, manualKm: 0, w: { 1: 1, 2: 2, 3: 3, 4: 5 }, t1: 2, t2: 5, deg: 0, cap: 10, margin: 20,
     boundary: [], drawing: false, approved: false, approvedAt: '', log: [],
-    ded: { clause: '', value: '', rows: [] }, rounds: []
+    ded: { clause: '', value: '', itemName: '', itemValue: '', whole: false, rows: [] }, rounds: []
   };
   const svLayer = L.layerGroup().addTo(map);
   let svBoundLayer = null, svObsQueue = [], svCurObs = null, svDupPending = null, svTimer = null;
@@ -1897,6 +1913,29 @@
     if (svPip(p, poly)) return true;
     for (let i = 0; i < poly.length; i++) if (distToLineM(p, poly[i], poly[(i + 1) % poly.length]) <= sv.margin) return true;
     return false;
+  }
+
+  // ---- الخصم من المستخلص حسب جدول الجزاءات في العقد ----
+  const fmtSAR = v => (isFinite(v) ? v : 0).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' ر.س';
+  const fmt2 = v => (Math.round(v * 100) / 100).toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const NO_BAND = 'لم يُحسب الخصم لعدم وجود شريحة تعاقدية مطابقة';
+  function svDeduction(prev) {
+    const D = sv.ded, total = num(D.value, 0), item = num(D.itemValue, 0), whole = !!D.whole;
+    const out = { total, item, itemName: D.itemName || '', clause: D.clause || '', whole, row: null, pct: null, amount: null,
+      netItem: null, netTotal: null, base: whole ? total : item, err: '', msg: '' };
+    if (total > 0 && item > total) { out.err = 'قيمة البند محل التقييم أكبر من إجمالي قيمة المستخلص — صحّح القيم.'; return out; }
+    if (prev === null) { out.msg = 'لا توجد نسبة ملاحظات محسوبة بعد.'; return out; }
+    // الشريحة المطابقة فقط — لا يفترض البرنامج أي نسبة خصم
+    const p2 = Math.round(prev * 100) / 100;
+    out.row = D.rows.find(r => String(r.from).trim() !== '' && String(r.to).trim() !== '' && String(r.pct).trim() !== '' &&
+      p2 >= num(r.from, NaN) && p2 <= num(r.to, NaN)) || null;
+    if (!out.row) { out.msg = NO_BAND; return out; }
+    out.pct = num(out.row.pct, 0);
+    if (!(out.base > 0)) { out.msg = whole ? 'أدخل إجمالي قيمة المستخلص لحساب مبلغ الخصم.' : 'أدخل قيمة البند محل التقييم لحساب مبلغ الخصم.'; return out; }
+    out.amount = out.base * out.pct / 100;                       // قيمة الخصم = القيمة الأساس × نسبة الخصم ÷ 100
+    if (item > 0) out.netItem = whole ? null : item - out.amount;  // صافي البند بعد الخصم
+    if (total > 0) out.netTotal = total - out.amount;              // صافي المستخلص بعد الخصم
+    return out;
   }
 
   // ---- الحساب الرئيسي: القطاعات الثابتة وشدة الملاحظات ----
@@ -1957,19 +1996,14 @@
       return { p, w, seg, why: '' };
     });
     const cls = v => v <= 0 ? 0 : v <= sv.t1 ? 1 : v <= sv.t2 ? 2 : 3;
-    const segs = segPts.map((v, i) => ({ i, pts: v, cls: cls(v), deg: v > sv.deg, obs: segObs[i] }));
+    // القطاع الذي فيه صورة نفايات واحدة أو أكثر = قطاع متدنٍ واحد فقط (تعدد الصور لا يزيد العدد)
+    const segs = segPts.map((v, i) => ({ i, pts: v, cls: cls(v), deg: segObs[i].length > 0, obs: segObs[i] }));
     const degN = segs.filter(x => x.deg).length;
     const sumPts = segPts.reduce((a, b) => a + b, 0);
     const cappedSum = segPts.reduce((a, b) => a + Math.min(b, sv.cap), 0);
     const prev = nSeg ? degN / nSeg * 100 : null;
     const sevIdx = nSeg ? cappedSum / (nSeg * sv.cap) * 100 : null;
-    // الخصم حسب جدول العقد (لا يساوي نسبة التدني تلقائياً)
-    let ded = null;
-    if (prev !== null && sv.ded.rows.length) {
-      const row = sv.ded.rows.find(r => prev >= num(r.from, -1) && prev <= num(r.to, -1));
-      const pct = row ? num(row.pct, 0) : 0, val = num(sv.ded.value, 0);
-      ded = { row, pct, amount: val ? val * pct / 100 : null };
-    }
+    const ded = svDeduction(prev);
     // تباعد الصور: ملاحظات تبعد أكثر من 3 كم عن بعضها
     let far = false;
     for (let i = 0; i < counted.length && !far; i++) for (let j = i + 1; j < counted.length; j++) if (distM(counted[i], counted[j]) > 3000) { far = true; break; }
@@ -1977,6 +2011,41 @@
       merged: all.filter(p => p.obs.merged), outObs: rows.filter(r => r.seg === null), exits, far };
   }
   const svPct = v => v === null ? '—' : (Math.round(v * 100) / 100) + '%';
+  const svPct2 = v => v === null || v === undefined ? '—' : fmt2(v) + '%';
+  // بطاقة النتائج والخصم (تُستخدم في الشاشة وفي PDF)
+  function svDedCard(r, forPdf) {
+    const d = r.ded;
+    const rows = [
+      ['المسافة المفحوصة داخل الحي', fmt2(r.dist / 1000) + ' كم' + (r.manual ? ' (مُدخلة يدوياً)' : '')],
+      ['طول القطاع', fmt2(r.L) + ' م'],
+      ['إجمالي القطاعات', r.nSeg + (r.nSeg ? ` (${fmt2(r.dist)} م ÷ ${fmt2(r.L)} م، مقرّبة للأعلى)` : '')],
+      ['عدد القطاعات المتدنية', r.degN + ' <small>(قطاع فيه صورة نفايات واحدة أو أكثر)</small>'],
+      ['نسبة ملاحظات تدني النظافة', `<b>${svPct2(r.prev)}</b>${r.nSeg ? ` = ${r.degN} ÷ ${r.nSeg} × 100` : ''}`],
+      ['مؤشر شدة التدني', `<b>${svPct2(r.sevIdx)}</b>${r.nSeg ? ` = ${fmt2(r.cappedSum)} ÷ (${r.nSeg} × ${sv.cap}) × 100` : ''}`],
+      ['إجمالي قيمة المستخلص', d.total > 0 ? fmtSAR(d.total) : '—'],
+      ['اسم البند محل التقييم', esc(d.itemName) || '—'],
+      ['قيمة البند محل التقييم', d.item > 0 ? fmtSAR(d.item) : '—'],
+      ['بند الجزاءات في العقد', esc(d.clause) || '—'],
+      ['الشريحة التعاقدية المطابقة', d.row ? `من <bdi dir="ltr">${fmt2(num(d.row.from, 0))}%</bdi> إلى <bdi dir="ltr">${fmt2(num(d.row.to, 0))}%</bdi>` : (d.err || d.msg || NO_BAND)],
+      ['نسبة الخصم المعتمدة', d.pct !== null ? fmt2(d.pct) + '%' : '—'],
+      ['قيمة الخصم بالريال', d.amount !== null ? `<b>${fmtSAR(d.amount)}</b> = ${fmtSAR(d.base)} × ${fmt2(d.pct)}% ${d.whole ? '(من كامل المستخلص)' : '(من قيمة البند)'}` : '—'],
+      ['صافي قيمة البند بعد الخصم', d.netItem !== null ? `${fmtSAR(d.netItem)} = ${fmtSAR(d.item)} − ${fmtSAR(d.amount)}` : '—'],
+      ['صافي المستخلص بعد الخصم', d.netTotal !== null ? `${fmtSAR(d.netTotal)} = ${fmtSAR(d.total)} − ${fmtSAR(d.amount)}` : '—']
+    ];
+    if (forPdf) {
+      const keep = ['نسبة ملاحظات تدني النظافة', 'الشريحة التعاقدية المطابقة', 'نسبة الخصم المعتمدة', 'قيمة البند محل التقييم',
+        'قيمة الخصم بالريال', 'صافي قيمة البند بعد الخصم', 'صافي المستخلص بعد الخصم'];
+      const map = Object.fromEntries(rows.map(x => [x[0], x[1]]));
+      rows.length = 0; keep.forEach(k => rows.push([k === 'نسبة الخصم المعتمدة' ? 'نسبة الخصم الناتجة من الشريحة المطابقة' : k, map[k]]));
+    }
+    return `<div class="sv-ded-res${forPdf ? ' pdf' : ''}">
+      <b>💰 النتائج والخصم من المستخلص</b>
+      ${d.err ? `<div class="sv-err">⛔ ${d.err}</div>` : ''}
+      <table class="sv-dedtbl">${rows.map(x => `<tr><td>${x[0]}</td><td>${x[1]}</td></tr>`).join('')}</table>
+      <div class="sv-fixed-warn">نسبة ملاحظات تدني النظافة لا تساوي نسبة الخصم. يُطبّق الخصم وفق جدول الجزاءات المعتمد في العقد وعلى قيمة البند محل التقييم فقط.</div>
+      ${d.whole ? '<div class="sv-err">⚠️ مفعّل: احتساب الخصم من كامل المستخلص بدل قيمة البند محل التقييم.</div>' : ''}
+    </div>`;
+  }
 
   // ---- العرض ----
   function svRender() {
@@ -2007,21 +2076,15 @@
       </table>
       
       <div class="sv-big">
-        <div class="prev"><small>نسبة انتشار تدني النظافة</small><b>${svPct(r.prev)}</b>
+        <div class="prev"><small>نسبة ملاحظات تدني النظافة</small><b>${svPct(r.prev)}</b>
           <span class="eq">${r.nSeg ? `${r.degN} ÷ ${r.nSeg} × 100` : 'ابدأ تتبع الرحلة لحساب القطاعات'}</span></div>
         <div class="sevi"><small>مؤشر شدة التدني</small><b>${svPct(r.sevIdx)}</b>
           <span class="eq">${r.nSeg ? `${r.cappedSum} ÷ (${r.nSeg} × ${sv.cap}) × 100` : '—'}</span></div>
       </div>
-      <div class="sv-ded-res">
-        <b>الخصم من المستخلص</b><br>
-        ${!sv.ded.rows.length ? 'لم يُدخل جدول خصم من العقد — لا يُحسب خصم.' :
-          `بند العقد: ${esc(sv.ded.clause || '—')}<br>
-           طريقة التحويل: نسبة انتشار التدني ${svPct(r.prev)} تقع في الشريحة ${ded && ded.row ? `${ded.row.from}% – ${ded.row.to}%` : '(لا توجد شريحة مطابقة)'}<br>
-           قيمة الخصم المقترحة: <b>${ded ? ded.pct + '%' : '—'}</b>${ded && ded.amount !== null ? ` = ${ded.amount.toLocaleString('en', { maximumFractionDigits: 2 })} ريال` : ''}`}
-      </div>
+      ${svDedCard(r)}
       ${r.manual ? '<div class="sv-warn">📝 حساب بدون تتبع: القطاعات من المسافة المُدخلة يدوياً، والملاحظات المتقاربة (ضمن نصف طول القطاع) تُعدّ قطاعاً واحداً. التتبع بـ GPS أدق لأنه يثبت المسار المفحوص فعلاً.</div>' : ''}
       ${!r.nSeg && r.counted.length ? '<div class="sv-warn">لحساب النسبة: ابدأ تتبع الجولة، أو أدخل «المسافة المفحوصة يدوياً» في بيانات الجولة.</div>' : ''}
-      <div class="sv-warn">الاعتماد النهائي حسب صلاحية الجهة وشروط العقد. نسبة انتشار التدني ومؤشر الشدة نتيجتان مستقلتان، ولا تساوي أيٌّ منهما نسبة الخصم تلقائيًا.
+      <div class="sv-warn">الاعتماد النهائي حسب صلاحية الجهة وشروط العقد. نسبة ملاحظات تدني النظافة ومؤشر الشدة نتيجتان مستقلتان، ولا تساوي أيٌّ منهما نسبة الخصم تلقائيًا.
         القطاعات تُحسب من المسافة المفحوصة، لا من عدد نقاط GPS ولا من مساحة المضلع بين الصور.</div>
       ${r.far ? '<div class="sv-warn">⚠️ توجد ملاحظات في مناطق متباعدة (أكثر من 3 كم). أنشئ جولة مستقلة لكل حي باستخدام «حفظ الجولة وبدء جولة جديدة».</div>' : ''}`;
     // قائمة الملاحظات
@@ -2049,7 +2112,7 @@
     const all2 = [...sv.rounds, ...(r.nSeg ? [{ district: sv.info.district || '(الجولة الحالية)', nSeg: r.nSeg, degN: r.degN, prev: r.prev, sevIdx: r.sevIdx, dist: r.dist, current: true }] : [])];
     const tSeg = all2.reduce((a, x) => a + x.nSeg, 0), tDeg = all2.reduce((a, x) => a + x.degN, 0);
     svEl('svRounds').innerHTML = sv.rounds.length ? `<h4>🗂️ الجولات والملخص العام</h4><div class="sv-tbl-wrap"><table>
-      <tr><th>الحي</th><th>المسافة</th><th>القطاعات</th><th>المتدنية</th><th>الانتشار</th><th>الشدة</th></tr>
+      <tr><th>الحي</th><th>المسافة</th><th>القطاعات</th><th>المتدنية</th><th>نسبة الملاحظات</th><th>الشدة</th></tr>
       ${all2.map(x => `<tr><td>${esc(x.district || '—')}${x.current ? ' (حالية)' : ''}</td><td>${fmtNice(x.dist)}</td><td>${x.nSeg}</td><td>${x.degN}</td><td>${svPct(x.prev)}</td><td>${svPct(x.sevIdx)}</td></tr>`).join('')}
       <tr><td colspan="2"><b>الملخص العام المرجّح</b></td><td><b>${tSeg}</b></td><td><b>${tDeg}</b></td><td colspan="2"><b>${tSeg ? svPct(tDeg / tSeg * 100) : '—'}</b> = ${tDeg} ÷ ${tSeg} × 100</td></tr>
       </table></div>` : '';
@@ -2171,14 +2234,42 @@
     if (!svGuard(`تعديل وزن الشدة «${SEV_LABEL[k]}»`, sv.w[k], v)) { e.target.value = sv.w[k]; return; }
     sv.w[k] = v; svSave(); svRender();
   }));
-  ['svClause', 'svValue'].forEach(id => svEl(id).addEventListener('change', e => {
-    const k = id === 'svClause' ? 'clause' : 'value';
+  ['svClause', 'svValue', 'svItemName', 'svItemValue'].forEach(id => svEl(id).addEventListener('change', e => {
+    const k = { svClause: 'clause', svValue: 'value', svItemName: 'itemName', svItemValue: 'itemValue' }[id];
     if (!svGuard('تعديل بيانات الخصم', sv.ded[k], e.target.value)) { e.target.value = sv.ded[k]; return; }
-    sv.ded[k] = e.target.value; svSave(); svRender();
+    sv.ded[k] = e.target.value; svSave(); svRender(); svCheckDed();
   }));
+  // تحقق: قيمة البند لا تتجاوز إجمالي المستخلص
+  function svCheckDed() {
+    const t = num(sv.ded.value, 0), it = num(sv.ded.itemValue, 0), bad = t > 0 && it > t;
+    svEl('svDedErr').hidden = !bad;
+    svEl('svDedErr').textContent = bad ? `⛔ قيمة البند محل التقييم (${fmtSAR(it)}) أكبر من إجمالي قيمة المستخلص (${fmtSAR(t)}).` : '';
+    svEl('svItemValue').classList.toggle('sv-bad', bad);
+  }
+  svEl('svWhole').onchange = e => {
+    if (e.target.checked) {
+      if (!confirm('الأصل أن يُحسب الخصم من قيمة البند محل التقييم فقط.\nهل تريد فعلاً احتساب الخصم من كامل قيمة المستخلص؟ سيُسجَّل ذلك في سجل التعديلات.')) { e.target.checked = false; return; }
+      const reason = sv.approved ? prompt('الجولة معتمدة — اكتب سبب تفعيل الخصم من كامل المستخلص:') : '—';
+      if (sv.approved && !(reason && reason.trim())) { e.target.checked = false; return; }
+      sv.ded.whole = true;
+      sv.log.push({ at: new Date().toLocaleString('ar-SA'), what: 'تفعيل احتساب الخصم من كامل المستخلص', from: 'من قيمة البند', to: 'من كامل المستخلص', reason: (reason || '—').trim() });
+    } else {
+      const reason = sv.approved ? prompt('الجولة معتمدة — اكتب سبب إلغاء الخصم من كامل المستخلص:') : '—';
+      if (sv.approved && !(reason && reason.trim())) { e.target.checked = true; return; }
+      sv.ded.whole = false;
+      sv.log.push({ at: new Date().toLocaleString('ar-SA'), what: 'إلغاء احتساب الخصم من كامل المستخلص', from: 'من كامل المستخلص', to: 'من قيمة البند', reason: (reason || '—').trim() });
+    }
+    svSave(); svRender();
+  };
   function svRenderDed() {
     svEl('svDedRows').innerHTML = sv.ded.rows.map((r, i) => `<tr data-i="${i}">
-      <td><input class="d-from" inputmode="decimal" value="${esc(r.from)}"></td><td><input class="d-to" inputmode="decimal" value="${esc(r.to)}"></td><td><input class="d-pct" inputmode="decimal" value="${esc(r.pct)}"></td></tr>`).join('');
+      <td><input class="d-from" inputmode="decimal" value="${esc(r.from)}"></td><td><input class="d-to" inputmode="decimal" value="${esc(r.to)}"></td><td><input class="d-pct" inputmode="decimal" value="${esc(r.pct)}"></td>
+      <td><button type="button" class="d-del" aria-label="حذف الشريحة">✖</button></td></tr>`).join('');
+    svEl('svDedRows').querySelectorAll('tr').forEach(tr => tr.querySelector('.d-del').onclick = () => {
+      const i = +tr.dataset.i, r = sv.ded.rows[i];
+      if (!svGuard('حذف شريحة خصم', `${r.from}–${r.to}% ← ${r.pct}%`, 'محذوفة')) return;
+      sv.ded.rows.splice(i, 1); svSave(); svRenderDed(); svRender();
+    });
     svEl('svDedRows').querySelectorAll('tr').forEach(tr => tr.querySelectorAll('input').forEach(inp => inp.onchange = () => {
       const r = sv.ded.rows[+tr.dataset.i], k = inp.className.slice(2);
       if (!svGuard('تعديل شريحة الخصم', r[k], inp.value)) { inp.value = r[k]; return; }
@@ -2197,6 +2288,9 @@
     Object.entries(SV_NUMS).forEach(([id, k]) => svEl(id).value = k === 'manualKm' && !sv[k] ? '' : sv[k]);
     [1, 2, 3, 4].forEach(k => svEl('svW' + k).value = sv.w[k]);
     svEl('svClause').value = sv.ded.clause; svEl('svValue').value = sv.ded.value;
+    svEl('svItemName').value = sv.ded.itemName || ''; svEl('svItemValue').value = sv.ded.itemValue || '';
+    svEl('svWhole').checked = !!sv.ded.whole;
+    svCheckDed();
     svEl('svOn').checked = sv.on;
     svRenderDed();
     svEl('svDraw').hidden = sv.drawing; svEl('svDrawDone').hidden = !sv.drawing; svEl('svDrawUndo').hidden = !sv.drawing;
@@ -2301,7 +2395,7 @@
       Object.assign(sv, d);
       sv.info = { ...{ district: '', contractor: '', contract: '', inspector: '', start: '', end: '', kind: 'car' }, ...(d.info || {}) };
       sv.w = { 1: 1, 2: 2, 3: 3, 4: 5, ...(d.w || {}) };
-      sv.ded = { clause: '', value: '', rows: [], ...(d.ded || {}) };
+      sv.ded = { clause: '', value: '', itemName: '', itemValue: '', whole: false, rows: [], ...(d.ded || {}) };
       sv.boundary = Array.isArray(d.boundary) ? d.boundary : [];
       sv.log = Array.isArray(d.log) ? d.log : []; sv.rounds = Array.isArray(d.rounds) ? d.rounds : [];
     }
@@ -3188,6 +3282,16 @@
         <table>${head}<tbody>${points.slice(0, firstRows).map(row).join('')}</tbody></table>`);
       for (let i = firstRows; i < points.length; i += nextRows)
         pages.push(`<table>${head}<tbody>${points.slice(i, i + nextRows).map(row).join('')}</tbody></table>`);
+
+      // صفحة نتائج مسح النظافة والخصم (عند تشغيل الوضع أو وجود ملاحظات)
+      if (sv.on || points.some(p => p.obs)) {
+        const r = svCompute();
+        pages.push(`
+          <h2>نتائج مسح النظافة والخصم من المستخلص${district ? ' — ' + district : ''}</h2>
+          <div class="meta">${sv.approved ? '🔒 جولة معتمدة بتاريخ ' + sv.approvedAt : 'جولة غير معتمدة'}</div>
+          ${svDedCard(r, true)}
+          ${sv.log.length ? `<div style="font-size:11px;margin-top:8px"><b>سجل التعديلات:</b><br>${sv.log.map(l => `${l.at} — ${esc(l.what)}${l.from && !/شريحة/.test(l.what) ? ' (' + esc(l.from) + ' ← ' + esc(l.to) + ')' : ''} — السبب: ${esc(l.reason)}`).join('<br>')}</div>` : ''}`);
+      }
 
       // صفحات الصور: 20 صورة في كل صفحة مع الإحداثيات والوقت
       const perPage = 20, totalPhotoPages = Math.ceil(points.length / perPage);
