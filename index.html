@@ -119,6 +119,12 @@
   #svTop .obsc .pend { color: #b71c1c; }
   #svQueueOld { background: #fff3e0; color: #e65100; }
   #svQueueOld:disabled { opacity: .55; }
+  .sv-cover { overflow-x: auto; }
+  .sv-cover h4 { margin: 4px 0 6px; color: #004d40; }
+  .sv-cover table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 520px; }
+  .sv-cover th, .sv-cover td { border: 1px solid #cfd8dc; padding: 5px 4px; text-align: center; }
+  .sv-cover th { background: #00695c; color: #fff; font-size: 11.5px; }
+  .sv-cover .km-tot td { background: #e0f2f1; }
   .sv-obs-count { background: #e0f2f1; color: #004d40; border-radius: 8px; padding: 8px 10px; font-size: 13.5px; font-weight: bold; line-height: 1.7; }
 
   /* ===== مسح النظافة ===== */
@@ -595,6 +601,7 @@
   </div>
 
   <div id="svResult"></div>
+  <div id="svCover" class="sv-cover"></div>
   <div id="svObsList"></div>
   <div id="svRounds"></div>
   <div id="svLog"></div>
@@ -626,11 +633,11 @@
 
 <!-- ورقة الملاحظة المكررة -->
 <div id="svDupSheet" class="sv-sheet" hidden>
-  <div class="sv-sheet-title">⚠️ قد تكون هذه الملاحظة مكررة</div>
+  <div class="sv-sheet-title">📍 صور متقاربة — هل هي نفس المخالفة؟</div>
   <div id="svDupText" class="sv-note"></div>
   <div class="sv-sheet-btns">
-    <button type="button" id="svDupMerge">دمجها مع الملاحظة السابقة</button>
-    <button type="button" id="svDupSeparate">احتسابها ملاحظة مستقلة</button>
+    <button type="button" id="svDupSeparate">مخالفة مختلفة — احتسابها ملاحظة مستقلة</button>
+    <button type="button" id="svDupMerge">نفس المخالفة — دمجها كصورة إثبات</button>
   </div>
 </div>
 
@@ -1670,6 +1677,72 @@
     return out;
   }
 
+  // ===== تغطية التصوير: المستهدف الإرشادي 100 صورة لكل 1 كم (≈ صورة كل 10 م) — ليس شرطاً للمسافة بين الصور =====
+  const COVER_PER_KM = 100;
+  function coverText(photos, target) {
+    if (!(target > 0)) return { pct: null, text: '—', over: 0 };
+    const over = photos > target ? Math.round(photos - target) : 0;
+    const pct = Math.min(100, photos / target * 100);   // لا تتجاوز 100%
+    return { pct, over, text: fmt2(pct) + '%' + (over ? ` + تجاوز ${over} ${over === 1 ? 'صورة' : 'صور'}` : '') };
+  }
+  // الصورة تُنسب للكيلومتر بإسقاط إحداثيتها على أقرب موضع في مسار GPS (لا على وقتها)، ولا تُحسب في أكثر من كيلومتر
+  function coverPerKm() {
+    const s = arSource(), pts = s ? s.pts : [];
+    const out = { rows: [], out: [], dist: 0, hasRoute: pts.length >= 2, tot: { target: 0, photos: 0, obs: 0, merged: 0 } };
+    if (!out.hasRoute) return out;
+    const pairs = []; let cum = 0;
+    for (let i = 1; i < pts.length; i++) { const d = distM(pts[i - 1], pts[i]); pairs.push({ a: pts[i - 1], b: pts[i], from: cum, to: cum + d }); cum += d; }
+    out.dist = cum;
+    const nKm = Math.max(1, Math.ceil(cum / 1000 - 1e-9));
+    const B = Array.from({ length: nKm }, () => ({ photos: 0, obs: 0, merged: 0, names: [] }));
+    const farM = Math.max(50, (sv.margin || 20) * 2);
+    points.forEach(p => {
+      let best = null, bd = Infinity;
+      const k = Math.PI / 180, R0 = 6371008.8, c0 = Math.cos(p.lat * k);
+      const X = q => [(q.lng - p.lng) * k * R0 * c0, (q.lat - p.lat) * k * R0];
+      pairs.forEach(pr => {
+        const [ax, ay] = X(pr.a), [bx, by] = X(pr.b), dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy;
+        const t = L2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / L2)) : 0;
+        const d = Math.hypot(ax + t * dx, ay + t * dy);
+        if (d < bd) { bd = d; best = pr.from + t * (pr.to - pr.from); }
+      });
+      if (best === null || bd > farM) { out.out.push({ name: p.name, d: bd }); return; }
+      const b = B[Math.min(nKm - 1, Math.floor(best / 1000 + 1e-9))];
+      b.photos++; b.names.push(p.name);
+      if (p.obs && p.obs.merged) b.merged++; else if (p.obs) b.obs++;
+    });
+    B.forEach((b, k) => {
+      const end = Math.min((k + 1) * 1000, cum), len = end - k * 1000;
+      const full = len >= 1000 - 1e-6;
+      const range = full ? `${k}–${k + 1}` : `${k}–${(Math.round(end / 10) / 100).toFixed(2).replace(/\.?0+$/, '') || k}`;
+      const target = Math.round(len / 1000 * COVER_PER_KM * 100) / 100;   // الجزء الناقص: طوله بالكم × 100
+      out.rows.push({ n: k + 1, range, target, ...b, cov: coverText(b.photos, target) });
+      out.tot.target += target; out.tot.photos += b.photos; out.tot.obs += b.obs; out.tot.merged += b.merged;
+    });
+    out.tot.target = Math.round(out.tot.target * 100) / 100;
+    out.tot.cov = coverText(out.tot.photos, out.tot.target);
+    return out;
+  }
+  // جدول التغطية (الواجهة و PDF)
+  function coverTableHTML(c, rows, withTotal) {
+    const head = `<thead><tr><th>رقم الجزء</th><th>نطاق المسافة</th><th>الصور المستهدفة</th><th>الصور الملتقطة</th><th>الملاحظات المستقلة</th><th>صور الإثبات المدمجة</th><th>نسبة تغطية التصوير</th></tr></thead>`;
+    const n2 = v => (Math.round(v * 100) / 100).toLocaleString('en');
+    const tr = x => `<tr><td><b>${x.n}</b></td><td><bdi dir="ltr">${x.range}</bdi> كم</td><td>${n2(x.target)}</td><td>${x.photos}</td><td>${x.obs}</td><td>${x.merged}</td><td>${x.cov.text}</td></tr>`;
+    const t = c.tot;
+    const tot = withTotal ? `<tr class="km-tot"><td><b>الإجمالي</b></td><td><b>${fmt2(c.dist / 1000)} كم</b></td><td><b>${n2(t.target)}</b></td><td><b>${t.photos}</b></td><td><b>${t.obs}</b></td><td><b>${t.merged}</b></td><td><b>${t.cov.text}</b></td></tr>` : '';
+    return `<table class="km-tbl cover-tbl">${head}<tbody>${rows.map(tr).join('')}${tot}</tbody></table>`;
+  }
+  // المؤشر العام: عدد الصور الملتقطة ÷ (المسافة المقطوعة بالكم × 100) × 100
+  function coverOverall() {
+    const c = coverPerKm();
+    let dist = c.dist, manual = false;
+    if (!(dist > 0) && num(sv.manualKm, 0) > 0) { dist = num(sv.manualKm, 0) * 1000; manual = true; }
+    const target = Math.round(dist / 1000 * COVER_PER_KM * 100) / 100;
+    // مع وجود مسار: الصور خارج المسار لا تدخل في التغطية (تظهر في قسم «صور خارج المسار»)
+    const photos = c.hasRoute ? c.tot.photos : points.length;
+    return { c, dist, manual, target, photos, ...coverText(photos, target) };
+  }
+
   // نقاط GPS على الخريطة: أخضر مطابق، رمادي غير مطابق، أحمر مستبعد
   let dotsTimer = null;
   function drawGpsDots() {
@@ -2102,7 +2175,14 @@
     svEl('svTopSev').textContent = svPct(r.sevIdx);
     svEl('svTopPrevEq').textContent = r.nSeg ? `${r.degN} ÷ ${r.nSeg} قطاع × 100${sv.info.district ? ' — ' + sv.info.district : ''}` : 'شغّل «مسح النظافة» وابدأ التتبع أو أدخل المسافة يدوياً';
     svEl('svTopSevEq').textContent = r.nSeg ? `${r.cappedSum} ÷ (${r.nSeg} × ${sv.cap}) × 100` : '';
-    svEl('svTopObs').innerHTML = sv.on || points.some(p => p.obs) ? svObsCountText() : '';
+    const cv = coverOverall();
+    const covLine = cv.target > 0 ? `<br>📷 تغطية التصوير: <b>${fmt2(cv.pct)}%</b> (${cv.photos} صورة من ${fmt2(cv.target)} مستهدفة = ${fmt2(cv.dist / 1000)} كم × 100${cv.c.out.length ? ` — ${cv.c.out.length} خارج المسار` : ''})${cv.over ? ` — تم تجاوز المستهدف بـ ${cv.over} صورة` : ''}` : '';
+    svEl('svTopObs').innerHTML = sv.on || points.some(p => p.obs) ? svObsCountText() + covLine : '';
+    svEl('svCover').innerHTML = `<h4>📷 تغطية التصوير وملاحظات النظافة لكل كيلومتر</h4>
+      <div class="sv-note">المستهدف الإرشادي: 100 صورة لكل 1 كم (≈ صورة كل 10 م). ليس شرطاً للمسافة بين الصور — تُقبل الصور مهما تقاربت، والتصوير حسب وجود الملاحظات.</div>
+      ${cv.c.hasRoute ? coverTableHTML(cv.c, cv.c.rows, true) : `<div class="sv-note">${cv.manual ? `بدون مسار GPS: المستهدف ${fmt2(cv.target)} صورة (${fmt2(cv.dist / 1000)} كم مُدخلة يدوياً) — التغطية ${cv.text}. الجدول لكل كيلومتر يحتاج تتبع المسار.` : 'ابدأ تتبع المسار لعرض الجدول لكل كيلومتر.'}</div>`}
+      ${cv.c.out.length ? `<div class="sv-err">صور خارج المسار (لا تدخل في تغطية أي كيلومتر): ${cv.c.out.map(o => o.name).join('، ')}</div>` : ''}
+      ${cv.over ? `<div class="sv-note">تم تجاوز المستهدف بـ ${cv.over} صورة.</div>` : ''}`;
     svEl('svObsCount').innerHTML = svObsCountText();
     svEl('svQueueOld').disabled = !points.some(p => !p.obs);
     const segBoxes = r.segs.map(x => `<span class="sv-c${x.cls}" title="قطاع ${x.i + 1}: ${x.pts} نقطة">${x.i + 1}</span>`).join('');
@@ -2195,6 +2275,7 @@
     return true;
   }
 
+  const SV_NEAR_M = 10;   // مسافة «الصور المتقاربة» التي يُسأل عنها المستخدم (المستهدف الإرشادي: صورة كل 10 م)
   // ---- تسجيل ملاحظة نفايات بعد كل صورة ----
   function svQueuePhoto(i) {
     if (!sv.on) return;
@@ -2236,7 +2317,7 @@
   }
   function svObsCountText() {
     const c = svObsCounts();
-    return `📝 الملاحظات المحفوظة: ${c.saved}${c.merged ? ` (منها ${c.merged} مدمجة كتكرار)` : ''} — <span class="pend">صور لم تُسجّل كملاحظات: ${c.pending}${c.skipped ? ` (منها ${c.skipped} «ليست ملاحظة نفايات»)` : ''}</span>`;
+    return `📝 الملاحظات المستقلة: ${c.saved - c.merged}${c.merged ? ` — صور إثبات مدمجة: ${c.merged}` : ''} — <span class="pend">صور لم تُسجّل كملاحظات: ${c.pending}${c.skipped ? ` (منها ${c.skipped} «ليست ملاحظة نفايات»)` : ''}</span>`;
   }
   svEl('svObsSave').onclick = async () => {
     const p = svCurObs; if (!p) return;
@@ -2248,11 +2329,13 @@
       note: svEl('svObsNote').value.trim(), merged: null, at: Date.now() };
     await persist();
     svEl('svObsSheet').hidden = true;
-    // منع التكرار: نفس النوع، أقل من 20 م، وخلال 15 دقيقة
-    const prev = points.find(q => q !== p && q.obs && !q.obs.merged && q.obs.type === p.obs.type && distM(q, p) < 20 && Math.abs((q.obs.at || 0) - p.obs.at) < 15 * 60000);
+    // صور متقاربة (أقل من ${SV_NEAR_M} م، أياً كان النوع أو الوقت): لا دمج تلقائي — المستخدم يختار
+    // الصور تُقبل دائماً مهما قربت المسافة بينها (حتى أقل من متر)
+    const prev = points.filter(q => q !== p && q.obs && !q.obs.merged && distM(q, p) < SV_NEAR_M)
+      .sort((a, b) => distM(a, p) - distM(b, p))[0];
     if (prev) {
       svDupPending = { p, prev };
-      svEl('svDupText').textContent = `الصورة ${p.name} من نوع «${p.obs.type}» وتبعد ${fmtNice(distM(prev, p))} عن الملاحظة ${prev.name} وخلال مدة قصيرة.`;
+      svEl('svDupText').textContent = `الصورة ${p.name} («${p.obs.type}») تبعد ${fmtNice(distM(prev, p))} فقط عن الملاحظة ${prev.name} («${prev.obs.type}»). إذا كانت مخالفة مختلفة تُحسب ملاحظة مستقلة، وإذا كانت لنفس الكومة أو المخالفة من زاوية أخرى تُدمج كصورة إثبات (تدخل في عدد الصور ونسبة التغطية، ولا تزيد عدد الملاحظات).`;
       svEl('svDupSheet').hidden = false;
     } else { svRender(); svNextObs(); }
   };
@@ -3357,6 +3440,21 @@
         <table>${head}<tbody>${points.slice(0, firstRows).map(row).join('')}</tbody></table>`);
       for (let i = firstRows; i < points.length; i += nextRows)
         pages.push(`<table>${head}<tbody>${points.slice(i, i + nextRows).map(row).join('')}</tbody></table>`);
+
+      // جدول «تغطية التصوير وملاحظات النظافة لكل كيلومتر» — بعد الخريطة وجدول الإحداثيات وقبل صفحات الصور
+      const cvo = coverOverall(), cvr = cvo.c;
+      if (cvr.hasRoute && points.length) {
+        const perCv = 26;
+        for (let i = 0; i < cvr.rows.length; i += perCv) {
+          const last = i + perCv >= cvr.rows.length;
+          pages.push(`
+            <h2>تغطية التصوير وملاحظات النظافة لكل كيلومتر${district ? ' — ' + district : ''}${i ? ' (تابع)' : ''}</h2>
+            ${i ? '' : `<div class="meta">المستهدف الإرشادي 100 صورة لكل 1 كم (الجزء الناقص: طوله بالكم × 100) — نسبة التغطية = الصور الملتقطة ÷ المستهدفة × 100 بحد أقصى 100%<br>
+              تُنسب كل صورة للكيلومتر بإسقاط إحداثيتها على أقرب موضع في مسار GPS. صور الإثبات المدمجة تدخل في عدد الصور ولا تزيد عدد الملاحظات.</div>`}
+            ${coverTableHTML(cvr, cvr.rows.slice(i, i + perCv), last)}
+            ${last && cvr.out.length ? `<div class="meta" style="color:#b71c1c">صور خارج المسار (لا تدخل في تغطية أي كيلومتر): ${cvr.out.map(o => o.name).join('، ')}</div>` : ''}`);
+        }
+      }
 
       // جدول «عدد نقاط GPS داخل كل كيلومتر» — بعد الخريطة وجدول الإحداثيات وقبل صفحات الصور
       const km = gpsPerKm();
