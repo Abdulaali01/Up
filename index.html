@@ -114,6 +114,12 @@
   #svTop em { display: block; font-style: normal; font-size: 11.5px; margin-top: 2px; }
   #svTop .prev { background: #ffebee; color: #b71c1c; }
   #svTop .sevi { background: #fff3e0; color: #e65100; }
+  #svTop .obsc { grid-column: 1 / -1; background: #e0f2f1; color: #004d40; font-size: 13px; font-weight: bold; line-height: 1.6; }
+  #svTop .obsc:empty { display: none; }
+  #svTop .obsc .pend { color: #b71c1c; }
+  #svQueueOld { background: #fff3e0; color: #e65100; }
+  #svQueueOld:disabled { opacity: .55; }
+  .sv-obs-count { background: #e0f2f1; color: #004d40; border-radius: 8px; padding: 8px 10px; font-size: 13.5px; font-weight: bold; line-height: 1.7; }
 
   /* ===== مسح النظافة ===== */
   #svBtn { background: #00695c; color: #fff; }
@@ -369,6 +375,9 @@
   #report .card b { font-size: 14px; color: #1f4e79; font-family: Arial; }
   #report .card .c { direction: ltr; font-family: Arial; }
   #report .card .o { direction: ltr; font-family: Arial; color: #e65100; }
+  #report .km-tbl th { font-size: 11.5px; }
+  #report .km-tbl td { text-align: center; }
+  #report .km-tbl .km-tot td { background: #e8eaf6; }
   #report .sv-ded-res { background: #f5f3fb; border: 1px solid #d1c4e9; border-radius: 6px; padding: 8px; font-size: 12.5px; }
   #report .sv-dedtbl td { font-size: 12.5px; padding: 5px 6px; }
   #report .sv-fixed-warn { font-size: 12px; }
@@ -434,6 +443,7 @@
 <div id="svTop">
   <div class="prev"><small>نسبة ملاحظات تدني النظافة</small><b id="svTopPrev">—</b><em id="svTopPrevEq"></em></div>
   <div class="sevi"><small>مؤشر شدة التدني</small><b id="svTopSev">—</b><em id="svTopSevEq"></em></div>
+  <div class="obsc" id="svTopObs"></div>
 </div>
 
 <div id="status">اضغط "التقاط صورة" عند كل نقطة — النقاط تُحفظ تلقائياً.</div>
@@ -511,8 +521,10 @@
     <button id="svClose" class="cc-x" type="button" aria-label="إغلاق">✖</button>
   </div>
   <label class="sv-switch"><input type="checkbox" id="svOn"> تشغيل وضع مسح النظافة (كل صورة جديدة تُسجَّل كملاحظة نفايات)</label>
+  <div class="sv-obs-count" id="svObsCount"></div>
   <div class="sv-btns sv-quick">
     <button type="button" id="svTrackGo">▶ بدء تتبع الجولة</button>
+    <button type="button" id="svQueueOld">🗂 تسجيل الصور السابقة كملاحظات</button>
     <button type="button" id="svTrackStop">⏸ إيقاف مؤقت</button>
     <button type="button" id="svLocate">📍 موقعي الآن</button>
     <button type="button" id="svAttach">🖼️ إرفاق صور بإحداثياتها</button>
@@ -594,12 +606,13 @@
   <img id="svObsImg" alt="">
   <label>نوع المخالفة
     <select id="svObsType">
+      <option value="" disabled selected>— اختر نوع المخالفة —</option>
       <option>نفايات منزلية متناثرة</option><option>أكياس نفايات</option><option>مخلفات بناء</option><option>أثاث ومخلفات كبيرة</option>
       <option>حاوية ممتلئة أو فائضة</option><option>مخلفات زراعية</option><option>أخرى</option>
     </select>
   </label>
   <div class="sv-sev" id="svObsSev">
-    <label><input type="radio" name="svSev" value="1" checked> خفيفة</label>
+    <label><input type="radio" name="svSev" value="1"> خفيفة</label>
     <label><input type="radio" name="svSev" value="2"> متوسطة</label>
     <label><input type="radio" name="svSev" value="3"> شديدة</label>
     <label><input type="radio" name="svSev" value="4"> تراكم كبير / نقطة سوداء</label>
@@ -1629,6 +1642,34 @@
     return { ...base, ok: true, pct, text: pct.toFixed(2) + '%' };
   }
 
+  // عدد نقاط GPS المقبولة داخل كل كيلومتر من مسار الجولة (لا يغيّر حساب المسافة الحالي)
+  // المسافة التراكمية لكل نقطة = مجموع Haversine بين النقاط المتتالية بترتيب المسار؛ النقطة عند 1.000 كم تدخل في الكيلومتر التالي
+  function gpsPerKm() {
+    const g = gpsPointsRatio(), s = g.s, pts = s ? s.pts : [];
+    const out = { rows: [], hasLines: g.lines.length > 0, tol: g.tol, excAcc: g.excAcc, excJump: g.excJump,
+      label: s ? s.label : '', dist: 0, tot: { total: 0, matched: 0, unmatched: 0 } };
+    if (!pts.length) return out;
+    let cum = 0; const buckets = [];
+    pts.forEach((p, i) => {
+      if (i > 0) cum += distM(pts[i - 1], p);
+      const k = Math.floor(cum / 1000 + 1e-9);
+      const b = buckets[k] || (buckets[k] = { total: 0, matched: 0 });
+      b.total++; if (g.flags[i]) b.matched++;
+    });
+    out.dist = cum;
+    const nKm = Math.floor(cum / 1000 + 1e-9) + 1;
+    for (let k = 0; k < nKm; k++) {
+      const b = buckets[k] || { total: 0, matched: 0 };
+      const end = Math.min((k + 1) * 1000, cum);
+      const full = end >= (k + 1) * 1000 - 1e-6;
+      const range = full ? `${k}–${k + 1}` : `${k}–${(Math.round(end / 10) / 100).toFixed(2).replace(/\.?0+$/, '') || k}`;
+      out.rows.push({ n: k + 1, range, total: b.total, matched: b.matched, unmatched: b.total - b.matched });
+      out.tot.total += b.total; out.tot.matched += b.matched;
+    }
+    out.tot.unmatched = out.tot.total - out.tot.matched;
+    return out;
+  }
+
   // نقاط GPS على الخريطة: أخضر مطابق، رمادي غير مطابق، أحمر مستبعد
   let dotsTimer = null;
   function drawGpsDots() {
@@ -2061,6 +2102,9 @@
     svEl('svTopSev').textContent = svPct(r.sevIdx);
     svEl('svTopPrevEq').textContent = r.nSeg ? `${r.degN} ÷ ${r.nSeg} قطاع × 100${sv.info.district ? ' — ' + sv.info.district : ''}` : 'شغّل «مسح النظافة» وابدأ التتبع أو أدخل المسافة يدوياً';
     svEl('svTopSevEq').textContent = r.nSeg ? `${r.cappedSum} ÷ (${r.nSeg} × ${sv.cap}) × 100` : '';
+    svEl('svTopObs').innerHTML = sv.on || points.some(p => p.obs) ? svObsCountText() : '';
+    svEl('svObsCount').innerHTML = svObsCountText();
+    svEl('svQueueOld').disabled = !points.some(p => !p.obs);
     const segBoxes = r.segs.map(x => `<span class="sv-c${x.cls}" title="قطاع ${x.i + 1}: ${x.pts} نقطة">${x.i + 1}</span>`).join('');
     const ded = r.ded;
     svEl('svResult').innerHTML = `
@@ -2163,13 +2207,44 @@
     svEl('svObsName').textContent = svCurObs.name;
     svEl('svObsImg').src = svCurObs.img;
     svEl('svObsNote').value = '';
-    document.querySelector('input[name="svSev"][value="1"]').checked = true;
+    // لا اختيار افتراضي: يجب أن يختار المراقب نوع المخالفة ودرجة الشدة بنفسه
+    svEl('svObsType').value = '';
+    document.querySelectorAll('input[name="svSev"]').forEach(x => x.checked = false);
+    svEl('svObsName').textContent = svCurObs.name + (svObsQueue.length ? ` (متبقٍ ${svObsQueue.length})` : '');
     svEl('svObsSheet').hidden = false;
   }
-  svEl('svObsSkip').onclick = () => { svNextObs(); };
+  svEl('svObsSkip').onclick = async () => {
+    if (svCurObs && !svCurObs.obs) { svCurObs.obsSkip = true; await persist(); }
+    svRender(); svNextObs();
+  };
+  // الصور التي أُرفقت قبل تشغيل الوضع (أو تُركت): فتح نموذج التسجيل لها بالتتابع
+  svEl('svQueueOld').onclick = () => {
+    const list = points.filter(p => !p.obs && !svObsQueue.includes(p) && p !== svCurObs);
+    if (!list.length) { alert('لا توجد صور غير مسجّلة كملاحظات.'); return; }
+    const skipped = list.filter(p => p.obsSkip).length;
+    if (!confirm(`سيُفتح نموذج تسجيل الملاحظة لـ ${list.length} صورة غير مسجّلة${skipped ? ` (منها ${skipped} سبق تعليمها «ليست ملاحظة»)` : ''} واحدةً تلو الأخرى. متابعة؟`)) return;
+    svObsQueue.push(...list);
+    if (!svCurObs) svNextObs();
+  };
+  // عدد الملاحظات المحفوظة والصور غير المسجّلة
+  function svObsCounts() {
+    const saved = points.filter(p => p.obs).length;
+    const merged = points.filter(p => p.obs && p.obs.merged).length;
+    const pending = points.length - saved;
+    const skipped = points.filter(p => !p.obs && p.obsSkip).length;
+    return { saved, merged, pending, skipped };
+  }
+  function svObsCountText() {
+    const c = svObsCounts();
+    return `📝 الملاحظات المحفوظة: ${c.saved}${c.merged ? ` (منها ${c.merged} مدمجة كتكرار)` : ''} — <span class="pend">صور لم تُسجّل كملاحظات: ${c.pending}${c.skipped ? ` (منها ${c.skipped} «ليست ملاحظة نفايات»)` : ''}</span>`;
+  }
   svEl('svObsSave').onclick = async () => {
     const p = svCurObs; if (!p) return;
-    p.obs = { type: svEl('svObsType').value, sev: +document.querySelector('input[name="svSev"]:checked').value,
+    const selSev = document.querySelector('input[name="svSev"]:checked');
+    if (!svEl('svObsType').value) { alert('اختر نوع المخالفة أولاً.'); svEl('svObsType').focus(); return; }
+    if (!selSev) { alert('اختر درجة الشدة أولاً.'); return; }
+    delete p.obsSkip;
+    p.obs = { type: svEl('svObsType').value, sev: +selSev.value,
       note: svEl('svObsNote').value.trim(), merged: null, at: Date.now() };
     await persist();
     svEl('svObsSheet').hidden = true;
@@ -3283,14 +3358,37 @@
       for (let i = firstRows; i < points.length; i += nextRows)
         pages.push(`<table>${head}<tbody>${points.slice(i, i + nextRows).map(row).join('')}</tbody></table>`);
 
-      // صفحة نتائج مسح النظافة والخصم (عند تشغيل الوضع أو وجود ملاحظات)
-      if (sv.on || points.some(p => p.obs)) {
-        const r = svCompute();
+      // جدول «عدد نقاط GPS داخل كل كيلومتر» — بعد الخريطة وجدول الإحداثيات وقبل صفحات الصور
+      const km = gpsPerKm();
+      if (km.rows.length) {
+        const kmHead = `<thead><tr><th>رقم الجزء</th><th>نطاق المسافة</th><th>عدد نقاط GPS المقبولة</th><th>عدد النقاط المطابقة لخطوط الصور</th><th>عدد النقاط غير المطابقة</th><th>نسبة المطابقة داخل الجزء</th></tr></thead>`;
+        const kmRow = x => `<tr><td><b>${x.n}</b></td><td><bdi dir="ltr">${x.range}</bdi> كم</td><td>${x.total.toLocaleString('en')}</td>
+          <td>${km.hasLines ? x.matched.toLocaleString('en') : '—'}</td><td>${km.hasLines ? x.unmatched.toLocaleString('en') : '—'}</td>
+          <td>${km.hasLines && x.total ? fmt2(x.matched / x.total * 100) + '%' : '—'}</td></tr>`;
+        const t = km.tot;
+        const totRow = `<tr class="km-tot"><td><b>الإجمالي</b></td><td><b>${fmt2(km.dist / 1000)} كم</b></td><td><b>${t.total.toLocaleString('en')}</b></td>
+          <td><b>${km.hasLines ? t.matched.toLocaleString('en') : '—'}</b></td><td><b>${km.hasLines ? t.unmatched.toLocaleString('en') : '—'}</b></td>
+          <td><b>${km.hasLines && t.total ? fmt2(t.matched / t.total * 100) + '%' : '—'}</b></td></tr>`;
+        const note = `<div class="meta">المصدر: ${km.label} — نقاط GPS المقبولة فقط بعد استبعاد ضعف الدقة (${km.excAcc}) والقفزات غير الطبيعية (${km.excJump})
+          ${km.hasLines ? ` — سماحية المطابقة ±${km.tol} م من خطوط الصور` : ' — لم تُحدد خطوط الصور، لذلك المطابقة «—»'}<br>
+          نقطة الحد الفاصل (مثل 1.000 كم) تُحسب ضمن الكيلومتر التالي، ولا تُحسب أي نقطة مرتين.
+          ${km.hasLines ? `<br>النسبة العامة = ${t.matched.toLocaleString('en')} ÷ ${t.total.toLocaleString('en')} × 100` : ''}</div>`;
+        const perKm = 26;
+        for (let i = 0; i < km.rows.length; i += perKm) {
+          const last = i + perKm >= km.rows.length;
+          pages.push(`
+            <h2>عدد نقاط GPS داخل كل كيلومتر${district ? ' — ' + district : ''}${i ? ' (تابع)' : ''}</h2>
+            ${i ? '' : note}
+            <table class="km-tbl">${kmHead}<tbody>${km.rows.slice(i, i + perKm).map(kmRow).join('')}${last ? totRow : ''}</tbody></table>`);
+        }
+      }
+
+      // سجل تعديلات مسح النظافة فقط (جدول النتائج والخصم وجدول الشرائح لا يُطبعان في PDF)
+      if (sv.log.length) {
         pages.push(`
-          <h2>نتائج مسح النظافة والخصم من المستخلص${district ? ' — ' + district : ''}</h2>
+          <h2>سجل تعديلات مسح النظافة${district ? ' — ' + district : ''}</h2>
           <div class="meta">${sv.approved ? '🔒 جولة معتمدة بتاريخ ' + sv.approvedAt : 'جولة غير معتمدة'}</div>
-          ${svDedCard(r, true)}
-          ${sv.log.length ? `<div style="font-size:11px;margin-top:8px"><b>سجل التعديلات:</b><br>${sv.log.map(l => `${l.at} — ${esc(l.what)}${l.from && !/شريحة/.test(l.what) ? ' (' + esc(l.from) + ' ← ' + esc(l.to) + ')' : ''} — السبب: ${esc(l.reason)}`).join('<br>')}</div>` : ''}`);
+          <div style="font-size:11.5px;line-height:1.9">${sv.log.map(l => `${l.at} — ${esc(l.what)}${l.from && !/شريحة/.test(l.what) ? ' (' + esc(l.from) + ' ← ' + esc(l.to) + ')' : ''} — السبب: ${esc(l.reason)}`).join('<br>')}</div>`);
       }
 
       // صفحات الصور: 20 صورة في كل صفحة مع الإحداثيات والوقت
