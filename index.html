@@ -106,7 +106,8 @@
   /* ===== عناصر محذوفة من الواجهة (حسب طلب المستخدم) — تبقى نسبة النظافة أعلى الصفحة ===== */
   [hidden], #summary, #summary.show, #arCard, #arCard.show, #arResult, #arResult.show, #calcBox, #expLabel, #circleCard, #circleCard.open,
   #fieldCard, #fieldCard.open, #fsNear, #fsNear.show, #arConfirm, #arConfirm.show, #modeBox,
-  #captureBtn, #svBtn, #svRounds { display: none !important; }   /* أُخفيت بطلب المستخدم: زر التقاط صورة، زر مسح النظافة، جدول الجولات والملخص العام */
+  #captureBtn, #svBtn, #svRounds,
+  #svTop, label:has(#autoPick), #svObsSheet, #svDupSheet { display: none !important; }   /* + نسبة/شدة التدني أعلى الصفحة، عدّاد الملاحظات، «حدّد إحداثية ثانية»، النافذة المنبثقة للملاحظة */   /* أُخفيت بطلب المستخدم: زر التقاط صورة، زر مسح النظافة، جدول الجولات والملخص العام */
   body.has-ar { padding-bottom: 0; }
   #svTop { margin: 0 16px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   #svTop div { border-radius: 10px; padding: 8px 10px; text-align: center; }
@@ -384,12 +385,33 @@
   #report .card .o { direction: ltr; font-family: Arial; color: #e65100; }
   #report .km-tbl th { font-size: 11.5px; }
   #report .hull-tbl td { text-align: center; }
+  #report .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  #report .card2 { display: flex; gap: 8px; border: 1px solid #ccd; border-radius: 6px; padding: 5px; height: 172px; overflow: hidden; font-size: 11px; text-align: right; }
+  #report .card2 img { width: 190px; height: 160px; object-fit: cover; border-radius: 4px; flex: none; }
+  #report .card2 .info { flex: 1; line-height: 1.55; overflow: hidden; }
+  #report .card2 b { font-size: 15px; color: #1f4e79; font-family: Arial; }
+  #report .card2 .c, #report .card2 .o { direction: ltr; font-family: Arial; display: inline-block; }
+  #report .card2 .o { color: #e65100; }
+  #report .card2 .ob { margin-top: 4px; background: #efebe9; color: #3e2723; border-radius: 4px; padding: 4px; font-size: 11.5px; }
+  #report .card2 .ob.none { background: #f5f5f5; color: #9e9e9e; }
+  #report .obs-sum th { background: #6d4c41; color: #fff; }
+  #report .obs-sum .tot td { background: #efebe9; }
   #report .km-tbl td { text-align: center; }
   #report .km-tbl .km-tot td { background: #e8eaf6; }
   #report .sv-ded-res { background: #f5f3fb; border: 1px solid #d1c4e9; border-radius: 6px; padding: 8px; font-size: 12.5px; }
   #report .sv-dedtbl td { font-size: 12.5px; padding: 5px 6px; }
   #report .sv-fixed-warn { font-size: 12px; }
   #multiBtn { background: #2e7d32; color: #fff; }
+  .obs-cell { min-width: 150px; }
+  .obs-cell select, .obs-cell input { width: 100%; font-size: 12.5px; padding: 5px; margin: 2px 0; border: 1px solid #b0bec5; border-radius: 6px; background: #fff; }
+  .obs-cell .obs-st { display: block; color: #2e7d32; font-size: 11.5px; }
+  #obsSummary { margin: 10px 16px; background: #fff; border: 2px solid #6d4c41; border-radius: 12px; padding: 10px 12px; }
+  #obsSummary[hidden] { display: none; }
+  .obs-sum-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; color: #4e342e; margin-bottom: 6px; }
+  .obs-sum-head input { width: 90px; padding: 5px; border: 1px solid #b0bec5; border-radius: 6px; }
+  .obs-sum th { background: #6d4c41; }
+  .obs-sum .tot td { background: #efebe9; }
+  .obs-sum-note { font-size: 12px; color: #6d4c41; margin-top: 4px; }
   #hullCard { margin: 0 16px 10px; background: #fff; border: 2px solid #2e7d32; border-radius: 12px; padding: 10px 12px; font-size: 13.5px; }
   #hullCard[hidden] { display: none; }
   .hull-head { display: flex; justify-content: space-between; align-items: center; color: #1b5e20; font-size: 15px; margin-bottom: 6px; }
@@ -745,11 +767,19 @@
   <div id="map"></div>
   <div class="side">
     <table id="pointsTable">
-      <thead><tr><th>النقطة</th><th>الصورة</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الوقت</th></tr></thead>
+      <thead><tr><th>النقطة</th><th>الصورة</th><th>ملاحظة النفايات</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الوقت</th></tr></thead>
       <tbody></tbody>
       <tfoot></tfoot>
     </table>
   </div>
+</div>
+
+<div id="obsSummary" hidden>
+  <div class="obs-sum-head"><b>🧾 ملخص الملاحظات حسب النوع</b>
+    <label>المسافة (كم) <input type="number" id="obsKm" min="0.001" step="0.01" inputmode="decimal" placeholder="تلقائي"></label>
+    <input type="number" id="obsDen" hidden></div>
+  <div class="obs-sum-note" id="obsDenNote"></div>
+  <div class="obs-sum-body"></div>
 </div>
 
 <div id="report"></div>
@@ -2304,6 +2334,7 @@
   const SV_NEAR_M = 10;   // مسافة «الصور المتقاربة» التي يُسأل عنها المستخدم (المستهدف الإرشادي: صورة كل 10 م)
   // ---- تسجيل ملاحظة نفايات بعد كل صورة ----
   function svQueuePhoto(i) {
+    return;   // الملاحظة تُدوَّن الآن بجوار الصورة في الجدول (النافذة المنبثقة أُلغيت بطلب المستخدم)
     if (!sv.on) return;
     svObsQueue.push(points[i]);
     if (!svCurObs) svNextObs();
@@ -2875,6 +2906,11 @@
     flyToPhotos(points.slice(firstNew));   // الخريطة تنتقل إلى مواقع الصور المرفقة
     if (multiBounds) { multiBounds = false; hullShow(true); }
   }
+  // القيمة المرجعية للقسمة في ملخص الملاحظات (تُحفظ)
+  document.getElementById('obsKm').onchange = e => { const v = parseFloat(e.target.value); setSetting('pm_obskm', v > 0 ? String(v) : ''); obsSummaryRender(); };
+  // «حدّد إحداثية ثانية بعد كل صورة» أُخفي بطلب المستخدم، فيُطفأ
+  autoPick.checked = false;
+
   // ===== إدراج صور متعددة واستخراج إحداثياتها ثم رسم حدودها (اختياري — لا يغيّر الإدراج العادي) =====
   let multiBounds = false;
   document.getElementById('multiBtn').onclick = () => document.getElementById('multiInput').click();
@@ -3163,6 +3199,74 @@
     else if (all.length === 1) map.setView(all[0], 18);
   }
 
+  // ===== ملاحظة النفايات بجوار كل صورة (بدل النافذة المنبثقة) =====
+  function OBS_TYPES() { return [...document.querySelectorAll('#svObsType option')].map(o => o.value || o.textContent).filter(v => v && !v.startsWith('—')); }
+  // دوال مُعرّفة مسبقاً (hoisted) لأن الجدول قد يُرسم قبل الوصول لهذا الجزء
+  var OBS_SEV = { 1: 'خفيفة', 2: 'متوسطة', 3: 'شديدة', 4: 'تراكم كبير / نقطة سوداء' };
+  function obsSevName(k) { return ({ 1: 'خفيفة', 2: 'متوسطة', 3: 'شديدة', 4: 'تراكم كبير / نقطة سوداء' })[k] || '—'; }
+  function obsCellHTML(p) {
+    const o = p.obs || {}, t = o.type || '', sv0 = o.sev || '';
+    return `<select class="obs-type"><option value="">— نوع المخالفة —</option>${OBS_TYPES().map(x => `<option${x === t ? ' selected' : ''}>${esc(x)}</option>`).join('')}</select>
+      <select class="obs-sev"><option value="">— الشدة —</option>${[1, 2, 3, 4].map(k => `<option value="${k}"${+sv0 === k ? ' selected' : ''}>${obsSevName(k)}</option>`).join('')}</select>
+      <input class="obs-note" type="text" placeholder="ملاحظة المراقب" value="${esc(o.note || '')}">
+      <small class="obs-st">${p.obs ? (p.obs.merged ? '📎 صورة إثبات للملاحظة ' + p.obs.merged : '✔ محفوظة') : (p.obsDraft ? '⏳ اختر النوع والشدة' : '')}</small>`;
+  }
+  function obsCellBind(td, p) {
+    td.onclick = ev => ev.stopPropagation();
+    const ty = td.querySelector('.obs-type'), se = td.querySelector('.obs-sev'), no = td.querySelector('.obs-note');
+    const save = async () => {
+      if (ty.value && se.value) {
+        p.obs = { ...(p.obs || { merged: null, at: Date.now() }), type: ty.value, sev: +se.value, note: no.value.trim() };
+        delete p.obsDraft; delete p.obsSkip;
+      } else if (!ty.value && !se.value) {
+        if (p.obs && !confirm(`حذف ملاحظة الصورة ${p.name}؟`)) { redraw(); return; }
+        delete p.obs; delete p.obsDraft;
+      } else { p.obsDraft = { type: ty.value, sev: se.value }; if (p.obs) delete p.obs; }
+      await persist(); redraw();
+    };
+    ty.onchange = save; se.onchange = save;
+    no.onchange = async () => { if (p.obs) { p.obs.note = no.value.trim(); await persist(); } };
+    if (p.obsDraft && !p.obs) { ty.value = p.obsDraft.type || ''; se.value = p.obsDraft.sev || ''; }
+  }
+  // ملخص الملاحظات حسب النوع: العدد ÷ القيمة المرجعية (افتراضياً 1000) × 100
+  // كل 1 كم = 1000 نقطة (نقطة لكل متر) ← المقام = المسافة بالكم × 1000
+  // المسافة: المُدخلة يدوياً إن وُجدت، وإلا مسافة مسار GPS، وإلا 1 كم
+  function obsKmInfo() {
+    const man = parseFloat(getSetting('pm_obskm', ''));
+    if (man > 0) return { km: man, src: 'مُدخلة يدوياً' };
+    let route = 0; try { const s0 = arSource(); route = s0 ? s0.dist : 0; } catch (e) {}
+    if (route > 0) return { km: route / 1000, src: 'من مسار GPS' };
+    return { km: 1, src: 'افتراضية — أدخل المسافة' };
+  }
+  function obsDen() { const k = obsKmInfo().km; return Math.max(1, Math.round(k * 1000)); }
+  function obsSummary() {
+    const list = points.filter(p => p.obs && !p.obs.merged), den = obsDen();
+    const m = new Map();
+    list.forEach(p => m.set(p.obs.type, (m.get(p.obs.type) || 0) + 1));
+    const rows = [...m.entries()].sort((a, b) => b[1] - a[1]).map(([type, n]) => ({ type, n, pct: n / den * 100 }));
+    const total = list.length;
+    return { rows, total, den, pct: total / den * 100, merged: points.filter(p => p.obs && p.obs.merged).length, pending: points.filter(p => !p.obs).length };
+  }
+  function obsSummaryHTML(r) {
+    const f = v => (Math.round(v * 100) / 100).toFixed(2);
+    return `<table class="obs-sum"><thead><tr><th>نوع المخالفة</th><th>العدد</th><th>المعادلة</th><th>النسبة</th></tr></thead><tbody>
+      ${r.rows.map(x => `<tr><td>${esc(x.type)}</td><td><b>${x.n}</b></td><td dir="ltr">${x.n} ÷ ${r.den.toLocaleString('en')} × 100</td><td><b>${f(x.pct)}%</b></td></tr>`).join('') || '<tr><td colspan="4">لا توجد ملاحظات محفوظة بعد</td></tr>'}
+      ${r.rows.length ? `<tr class="tot"><td><b>الإجمالي</b></td><td><b>${r.total}</b></td><td dir="ltr">${r.total} ÷ ${r.den.toLocaleString('en')} × 100</td><td><b>${f(r.pct)}%</b></td></tr>` : ''}
+    </tbody></table>`;
+  }
+  function obsSummaryRender() {
+    const box = document.getElementById('obsSummary'); if (!box) return;
+    const r = obsSummary();
+    box.hidden = !points.length;
+    const ki = obsKmInfo(), kmIn = document.getElementById('obsKm');
+    if (kmIn && document.activeElement !== kmIn) kmIn.value = getSetting('pm_obskm', '') ? ki.km : '';
+    if (kmIn) kmIn.placeholder = (Math.round(ki.km * 1000) / 1000) + ' (تلقائي)';
+    const dn = document.getElementById('obsDenNote');
+    if (dn) dn.textContent = `الكيلو = 1000 نقطة ← المسافة ${(Math.round(ki.km * 1000) / 1000)} كم (${ki.src}) × 1000 = ${obsDen().toLocaleString('en')} نقطة، وكل نوع يُقسم عليها.`;
+    box.querySelector('.obs-sum-body').innerHTML = obsSummaryHTML(r) +
+      `<div class="obs-sum-note">${r.pending ? `صور بلا ملاحظة: ${r.pending}` : ''}${r.merged ? ` — صور إثبات مدمجة: ${r.merged}` : ''}</div>`;
+  }
+
   function redraw(fit) {
     if (typeof hullRender === 'function') setTimeout(() => { try { hullRender(); } catch (e) {} }, 0);
     const pc = photoCoords().map(c => [c.lat, c.lng]);
@@ -3221,6 +3325,7 @@
       tr.innerHTML = `
         <td><b>${p.name}</b><br><label class="ar-chk" title="ضمن شكل مساحة الصور فقط (لا يؤثر على نسبة المسافات)"><input type="checkbox" class="ar-in" ${p.inArea !== false ? 'checked' : ''}> مساحة ${selRank.get(p) || ''}</label></td>
         <td><img src="${p.img}"></td>
+        <td class="obs-cell">${obsCellHTML(p)}</td>
         <td><span class="ll">${ll(p)}</span>${farFromOthers(i) ? '<br><small style="color:#c62828;font-weight:bold">⚠️ بعيدة جداً عن باقي الصور — تحقّق من الإحداثية</small>' : ''}${SRC_TAG[p.src] ? `<br><small style="color:#2e7d32">${SRC_TAG[p.src]}</small>` : ''}<br><button class="mini btn-del edit-c" style="color:#1f4e79">✏️ تعديل</button></td>
         <td>${p.pick ? `<span class="ll pk">${ll(p.pick)}</span><br>` : ''}</td>
         <td>${d !== null ? `<span class="dist">${fmtLen(d)}</span>` : '—'}</td>
@@ -3235,7 +3340,8 @@
         redraw();   // يعيد ترقيم الترتيب ويحسب النسب فوراً
       };
       tr.querySelector('.edit-c').onclick = ev => { ev.stopPropagation(); editCoords(i); };
-      const cell = tr.children[3];
+      obsCellBind(tr.querySelector('.obs-cell'), p);
+      const cell = tr.children[4];
       const b1 = document.createElement('button');
       b1.className = 'mini btn-pick';
       b1.textContent = p.pick ? '📍 تغيير' : '📍 تحديد';
@@ -3254,9 +3360,10 @@
     const n = pickedCount();
     const sp = specStats();
     document.querySelector('#pointsTable tfoot').innerHTML = n ? `
-      <tr><td colspan="4">عدد الإحداثيات المحددة: ${n} من ${points.length}</td>
+      <tr><td colspan="5">عدد الإحداثيات المحددة: ${n} من ${points.length}</td>
       <td colspan="2">متوسط المسافة: ${fmtLen(sp.dist / n)}</td></tr>
-      <tr><td colspan="4">${sp.label}</td><td colspan="2">${fmtLen(sp.dist)}</td></tr>` : '';
+      <tr><td colspan="5">${sp.label}</td><td colspan="2">${fmtLen(sp.dist)}</td></tr>` : '';
+    obsSummaryRender();
 
     undoBtn.disabled = points.length === 0;
     pdfBtn.disabled = points.length === 0 && !fs.pts.length;
@@ -3605,19 +3712,28 @@
       }
 
       // صفحات الصور: 20 صورة في كل صفحة مع الإحداثيات والوقت
-      const perPage = 20, totalPhotoPages = Math.ceil(points.length / perPage);
+      // كل صورة وبجوارها ملاحظتها (12 صورة في الصفحة)
+      const perPage = 12, totalPhotoPages = Math.ceil(points.length / perPage);
       for (let i = 0; i < points.length; i += perPage) {
         pages.push(`
-          <h2>صور النقاط${district ? ' — ' + district : ''} (${i / perPage + 1} / ${totalPhotoPages})</h2>
-          <div class="grid">${points.slice(i, i + perPage).map(p => `
-            <div class="card">
+          <h2>صور النقاط وملاحظاتها${district ? ' — ' + district : ''} (${i / perPage + 1} / ${totalPhotoPages})</h2>
+          <div class="grid2">${points.slice(i, i + perPage).map(p => `
+            <div class="card2">
               <img src="${p.img}">
-              <b>${p.name}</b>
-              <div class="c">${ll(p)}</div>
-              ${p.pick ? `<div class="o">${pickName(p)} ${ll(p.pick)} — ${fmtLen(pairDist(p))}</div>` : ''}
-              <div>${p.time}</div>
+              <div class="info">
+                <b>${p.name}</b> <span class="c">${ll(p)}</span>
+                ${p.pick ? `<div class="o">${pickName(p)} ${ll(p.pick)} — ${fmtLen(pairDist(p))}</div>` : ''}
+                <div class="t">${p.time}</div>
+                ${p.obs ? `<div class="ob">🧹 ${esc(p.obs.type)}<br>الشدة: ${obsSevName(p.obs.sev)}${p.obs.merged ? `<br>📎 صورة إثبات للملاحظة ${p.obs.merged}` : ''}${p.obs.note ? `<br>📝 ${esc(p.obs.note)}` : ''}</div>` : '<div class="ob none">لا توجد ملاحظة</div>'}
+              </div>
             </div>`).join('')}
           </div>`);
+      }
+      // في النهاية: ملخص الملاحظات حسب النوع
+      if (points.some(p => p.obs)) {
+        pages.push(`<h2>ملخص الملاحظات حسب النوع${district ? ' — ' + district : ''}</h2>
+          <div class="meta">الكيلو = 1000 نقطة ← المسافة ${(Math.round(obsKmInfo().km * 1000) / 1000)} كم × 1000 = ${obsDen().toLocaleString('en')} نقطة<br>النسبة = عدد ملاحظات النوع ÷ ${obsDen().toLocaleString('en')} × 100 — صور الإثبات المدمجة لا تُحسب ملاحظات مستقلة</div>
+          ${obsSummaryHTML(obsSummary())}`);
       }
 
       report.classList.add('on');
