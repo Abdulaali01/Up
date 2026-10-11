@@ -387,6 +387,8 @@
   #report .hull-tbl td { text-align: center; }
   #report .pt-img { width: 92px; height: 68px; object-fit: cover; border-radius: 4px; display: block; margin: 0 auto; }
   #report .pt-img.fix { border: 2px solid #2e7d32; }
+  #report .pdf-note { margin: 4px 0 8px; background: #fff8e1; border: 1px solid #ffca28; color: #5d4037; border-radius: 6px; padding: 6px 8px; font-size: 12px; font-weight: bold; text-align: center; line-height: 1.6; }
+  #report .pdf-note small { font-weight: normal; font-size: 10.5px; }
   #report .pdf-fixbox { width: 110px; height: 80px; margin: 0 auto; border: 2px dashed #2e7d32; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #2e7d32; background: #f1f8e9; }
   #report .pdf-fixbox span { font-size: 34px; font-weight: bold; line-height: 1; }
   #report .pdf-fixbox small { font-size: 9.5px; }
@@ -3883,7 +3885,7 @@
         const d = p.pick ? fmtLen(pairDist(p)) : '—';
         return `<tr><td><b>${p.name}</b><br><a data-pdf-url="${gmUrl(p)}" class="pdf-ll" dir="ltr">${ll(p)}</a></td>
           <td><img class="pt-img" src="${p.img}"></td>
-          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : `<div class="pdf-fixbox" data-pdf-url="${fixUrl(p)}"><span>＋</span><small>اضغط لإرفاق صورة</small></div>`}</td>
+          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : `<div class="pdf-fixbox" data-pdf-fix="${points.indexOf(p)}"><span>＋</span><small>صورة المعالجة</small></div>`}</td>
           <td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
       const rowOld = p => {
@@ -3891,15 +3893,17 @@
         return `<tr><td><b>${p.name}</b></td><td dir="ltr">${ll(p)}</td><td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
       const headOld = `<thead><tr><th>النقطة</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
-      const head = `<thead><tr><th>النقطة / الإحداثيات (اضغط للفتح)</th><th>الصورة</th><th>إرفاق</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
+      const head = `<thead><tr><th>النقطة / الإحداثيات (اضغط للفتح)</th><th>الصورة</th><th>صورة المعالجة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
 
       statusEl.textContent = 'جاري تحميل صورة الخريطة...';
       const mapImg = await mapImage();
       statusEl.textContent = 'جاري إنشاء ملف PDF...';
-      const firstRows = 5, nextRows = 13;   // صفوف أطول لأن فيها صورة الموقع وصورة المعالجة
+      const firstRows = 4, nextRows = 13;   // صفوف أطول لأن فيها صورة الموقع وصورة المعالجة
       pages.push(`
         <h2>جدول إحداثيات النقاط${district ? ' — ' + district : ''}</h2>
         <div class="meta">${district ? 'الحي: <b>' + district + '</b> — ' : ''}عدد النقاط: ${points.length}<br>تاريخ التقرير: ${new Date().toLocaleString('ar-SA')}</div>
+        <div class="pdf-note">📎 لإرفاق الصورة، افتح الملف باستخدام تطبيق Adobe Acrobat Reader، ثم اضغط «＋» في خانة «صورة المعالجة» واختر الصورة، ثم احفظ الملف وأرسله.<br>
+          <small>ملاحظة: إدراج الصور في خانات PDF مدعوم في Adobe Acrobat Reader على الكمبيوتر وفي تطبيق PDF Expert على iPhone، وغير مدعوم في عارضات الجوال العادية.</small></div>
         <div class="shape">${mapImg ? `<img src="${mapImg}" style="width:100%;border-radius:6px;border:1px solid #ccd">` : ''}</div>
         <table>${head}<tbody>${points.slice(0, firstRows).map(row).join('')}</tbody></table>`);
       for (let i = firstRows; i < points.length; i += nextRows)
@@ -3992,17 +3996,17 @@
         if (fixBoxes.length) {
           const PB = (window.jspdf && (window.jspdf.AcroFormPushButton || (window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.AcroFormPushButton))) || null;
           if (PB && pdf.addField) {
-            const rr = report.getBoundingClientRect(), k = w / rr.width;
+            const rr = report.getBoundingClientRect(), k = w / rr.width, ky = h / rr.height;   // ky يطابق الصفحة حتى لو ضُغطت الصورة عمودياً
             // JavaScript داخل PDF (بصيغة hex لتجنب الأقواس): عرض الصورة فقط ثم فتح اختيار الصورة
-            const js = 'event.target.buttonPosition = position.iconOnly; event.target.buttonScaleWhen = scaleWhen.always; event.target.buttonImportIcon();';
+            const js = 'event.target.buttonPosition = position.iconOnly; event.target.buttonScaleWhen = scaleWhen.always; event.target.buttonScaleHow = scaleHow.proportional; event.target.buttonAlignX = 50; event.target.buttonAlignY = 50; var r = event.target.buttonImportIcon(); if (r == 0) { event.target.fillColor = color.white; }';
             const hex = [...new TextEncoder().encode(js)].map(b => b.toString(16).padStart(2, '0')).join('');
             fixBoxes.forEach(el => {
-              const b = el.getBoundingClientRect(), y = margin + (b.top - rr.top) * k;
-              if (y + b.height * k > margin + h) return;
+              const b = el.getBoundingClientRect(), y = margin + (b.top - rr.top) * ky;
+              if (y + b.height * ky > margin + h + 1) return;
               try {
                 const btn = new PB();
                 btn.fieldName = 'fix_' + el.dataset.pdfFix + '_' + c;
-                btn.x = margin + (b.left - rr.left) * k; btn.y = y; btn.width = b.width * k; btn.height = b.height * k;
+                btn.x = margin + (b.left - rr.left) * k; btn.y = y; btn.width = b.width * k; btn.height = b.height * ky;
                 Object.defineProperty(btn, 'A', { value: `<< /S /JavaScript /JS <${hex}> >>`, enumerable: true, configurable: false, writable: false });
                 pdf.addField(btn);
               } catch (e) { console.warn('fix field', e); }
@@ -4011,10 +4015,10 @@
         }
         // روابط قابلة للضغط فوق الإحداثيات (تفتح خرائط Google)
         if (pdf.link) {
-          const rr = report.getBoundingClientRect(), k = w / rr.width;
+          const rr = report.getBoundingClientRect(), k = w / rr.width, ky = h / rr.height;
           report.querySelectorAll('[data-pdf-url]').forEach(a => {
-            const b = a.getBoundingClientRect(), y = margin + (b.top - rr.top) * k;
-            if (y + b.height * k <= margin + h) pdf.link(margin + (b.left - rr.left) * k, y, b.width * k, b.height * k, { url: a.dataset.pdfUrl });
+            const b = a.getBoundingClientRect(), y = margin + (b.top - rr.top) * ky;
+            if (y + b.height * ky <= margin + h + 1) pdf.link(margin + (b.left - rr.left) * k, y, b.width * k, b.height * ky, { url: a.dataset.pdfUrl });
           });
         }
       }
