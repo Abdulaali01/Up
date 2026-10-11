@@ -431,6 +431,9 @@
   #ptsView .pv-groups a { background: #1f4e79; color: #fff; border-radius: 6px; padding: 6px 9px; text-decoration: none; }
   .obs-cell { min-width: 150px; }
   #map.fd-on { cursor: crosshair; outline: 3px solid #00bcd4; }
+  .enc-cell .enc-n { font-size: 16px; color: #006064; }
+  .enc-cell small { color: #455a64; }
+  #report .enc-n { font-size: 15px; color: #006064; }
   .area-info { font-size: 11.5px; color: #006064; background: #e0f7fa; border-radius: 6px; padding: 3px 5px; margin: 3px 0; line-height: 1.5; }
   .btn-area { background: #00838f !important; color: #fff !important; }
   .area-tip { background: rgba(0,96,100,.85); color: #fff; border: 0; font-weight: bold; font-size: 12px; }
@@ -802,7 +805,7 @@
 <div id="pickBar">
   <span id="pickText"></span>
   <button id="areaUndo" hidden>↶ تراجع نقطة</button>
-  <button id="areaClose" hidden>🔒 إغلاق وحساب المساحة</button>
+  <button id="areaClose" hidden>💾 حفظ وإغلاق الرسم</button>
   <button id="pickCancel">تخطي</button>
 </div>
 
@@ -810,7 +813,7 @@
   <div id="map"></div>
   <div class="side">
     <table id="pointsTable">
-      <thead><tr><th>النقطة</th><th>الصورة</th><th class="fix-th">إرفاق</th><th>ملاحظة النفايات</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الوقت</th></tr></thead>
+      <thead><tr><th>النقطة</th><th>الصورة</th><th class="fix-th">إرفاق</th><th>ملاحظة النفايات</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>عدد النقاط المحاطة أو المتصلة</th><th>المسافة بينهما</th><th>الوقت</th></tr></thead>
       <tbody></tbody>
       <tfoot></tfoot>
     </table>
@@ -3400,6 +3403,34 @@
   };
   document.getElementById('pickCancel').onclick = stopPick;
 
+  // ===== عدد النقاط (الصور) المحاطة بالرسم أو المتصلة بخطه =====
+  // محاطة: داخل الشكل المحفوظ. متصلة: تبعد 5 م أو أقل عن خط الرسم (ويُحسب للرسم غير المغلق أيضاً)
+  const ENC_TOUCH_M = 5;
+  function insidePoly(q, poly) {
+    let c = false;
+    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+      const a = poly[i], b = poly[j];
+      if (((a.lat > q.lat) !== (b.lat > q.lat)) && (q.lng < (b.lng - a.lng) * (q.lat - a.lat) / (b.lat - a.lat) + a.lng)) c = !c;
+    }
+    return c;
+  }
+  function enclosedPoints(p) {
+    const a = p.area; if (!a || !a.pts || a.pts.length < 2) return null;
+    const segs = []; for (let i = 1; i < a.pts.length; i++) segs.push([a.pts[i - 1], a.pts[i]]);
+    if (a.closed && a.pts.length >= 3) segs.push([a.pts[a.pts.length - 1], a.pts[0]]);
+    const inside = [], touch = [];
+    points.forEach(q => {
+      if (a.closed && a.pts.length >= 3 && insidePoly(q, a.pts)) inside.push(q.name);
+      else if (segs.some(([u, v]) => distToLineM(q, u, v) <= ENC_TOUCH_M)) touch.push(q.name);
+    });
+    return { inside, touch, total: inside.length + touch.length };
+  }
+  function encCellHTML(p) {
+    const e = enclosedPoints(p);
+    if (!e) return '—';
+    return `<b class="enc-n">${e.total}</b>${e.inside.length ? `<br><small>محاطة: ${e.inside.join('، ')}</small>` : ''}${e.touch.length ? `<br><small>متصلة: ${e.touch.join('، ')}</small>` : ''}`;
+  }
+
   // ===== عدة نقاط لنفس الصورة وإغلاقها لحساب مساحة المحيط (م²) =====
   let areaTarget = null;
   function areaM2(pts) {
@@ -3418,7 +3449,7 @@
   function fmtAreaM2(m2) { return Math.round(m2).toLocaleString('en') + ' م²' + (m2 >= 10000 ? ` (${(Math.round(m2 / 100) / 100).toLocaleString('en')} هكتار)` : ''); }
   function areaBarText() {
     const p = points[areaTarget], n = p.area.pts.length;
-    document.getElementById('pickText').textContent = `✍️ اضغط واسحب بإصبعك حول المنطقة لرسم محيط ${p.name} (أو اضغط نقاطاً متتالية) — عدد النقاط: ${n}${n >= 3 ? ` — المساحة: ${fmtAreaM2(areaM2(p.area.pts))} — للإغلاق اضغط «🔒 إغلاق» أو اضغط على النقطة 1` : ''}`;
+    document.getElementById('pickText').textContent = `✍️ ارسم بإصبعك حول المنطقة لمحيط ${p.name} (تقدر ترفع إصبعك وتكمل) — ${n ? 'نقاط الرسم: ' + n : 'لم يُرسم شيء بعد'}${n >= 3 ? ` — المساحة عند الحفظ: ${fmtAreaM2(areaM2(p.area.pts))} — اضغط «💾 حفظ» لتثبيت الرسم` : ''}`;
     document.getElementById('areaUndo').hidden = !n;
     document.getElementById('areaClose').hidden = n < 3;
   }
@@ -3469,13 +3500,16 @@
     if (fdLine) { map.removeLayer(fdLine); fdLine = null; }
     if (fdPts.length < 3 || areaTarget === null) return;   // ضغطة قصيرة = إضافة نقطة عادية (يتعامل معها حدث النقر)
     fdSkipClick = true; setTimeout(() => { fdSkipClick = false; }, 400);
-    // تخفيف عدد النقاط (حد أقصى 200) مع الإبقاء على الشكل
+    // تخفيف عدد النقاط (حد أقصى 200 لكل سحبة) مع الإبقاء على الشكل
     let pts = fdPts; if (pts.length > 200) { const k = Math.ceil(pts.length / 200); pts = pts.filter((_, i) => i % k === 0); }
+    // لا يُغلق الرسم عند رفع الإصبع: تُضاف السحبة للرسم الحالي ويبقى مفتوحاً حتى الضغط على «💾 حفظ»
     const p = points[areaTarget];
-    p.area = { pts, closed: true, free: true };
-    const m2 = areaM2(pts), per = areaPerim(pts, true);
-    stopPick(); await persist(); redraw();
-    statusEl.textContent = `✍️ رُسم محيط ${p.name} باليد — المساحة ${fmtAreaM2(m2)} — المحيط ${fmtLen(per)} ✔`;
+    if (!p.area || p.area.closed) p.area = { pts: [], closed: false, free: true, strokes: [] };
+    p.area.free = true; p.area.closed = false;
+    p.area.strokes = p.area.strokes || [];
+    p.area.strokes.push(pts.length);
+    p.area.pts.push(...pts);
+    await persist(); redraw(); areaBarText();
   }
   fdBox.addEventListener('pointerup', fdEnd);
   fdBox.addEventListener('pointercancel', fdEnd);
@@ -3490,7 +3524,10 @@
   document.getElementById('pickCancel').onclick = async () => { const had = areaTarget !== null; stopPick(); if (had) { await persist(); redraw(); } };
   document.getElementById('areaUndo').onclick = async () => {
     if (areaTarget === null) return;
-    points[areaTarget].area.pts.pop(); await persist(); redraw(); areaBarText();
+    const ar = points[areaTarget].area;
+    if (ar.free && ar.strokes && ar.strokes.length) { const n = ar.strokes.pop(); ar.pts.splice(ar.pts.length - n, n); }
+    else ar.pts.pop();
+    await persist(); redraw(); areaBarText();
   };
   document.getElementById('areaClose').onclick = async () => {
     if (areaTarget === null) return;
@@ -3499,7 +3536,7 @@
     p.area.closed = true;
     const m2 = areaM2(p.area.pts), per = areaPerim(p.area.pts, true);
     stopPick(); await persist(); redraw();
-    statusEl.textContent = `📐 أُغلق محيط ${p.name}: ${p.area.pts.length} نقاط — المساحة ${fmtAreaM2(m2)} — المحيط ${fmtLen(per)} ✔`;
+    statusEl.textContent = `💾 حُفظ رسم ${p.name} وأُغلق — المساحة ${fmtAreaM2(m2)} — المحيط ${fmtLen(per)} ✔`;
   };
   map.on('click', async e => {
     if (areaTarget === null || fdSkipClick) return;
@@ -3507,7 +3544,7 @@
     // الضغط قرب النقطة الأولى يغلق المحيط مباشرة
     if (p.area.pts.length >= 3) {
       const f = map.latLngToContainerPoint([p.area.pts[0].lat, p.area.pts[0].lng]), c = map.latLngToContainerPoint(e.latlng);
-      if (Math.hypot(f.x - c.x, f.y - c.y) < 22) { document.getElementById('areaClose').onclick(); return; }
+      if (false && Math.hypot(f.x - c.x, f.y - c.y) < 22) { document.getElementById('areaClose').onclick(); return; }   // أُلغي: الإغلاق بزر «حفظ» فقط
     }
     p.area.pts.push({ lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) });
     await persist(); redraw(); areaBarText();
@@ -3519,11 +3556,11 @@
       const a = p.area; if (!a || !a.pts || !a.pts.length) return;
       const ll = a.pts.map(q => [q.lat, q.lng]);
       const editing = areaTarget === i;
-      if (ll.length >= 3) {
-        // مظلّلة دائماً من 3 نقاط: متقطعة أثناء الرسم، ثابتة بعد الإغلاق
+      if (ll.length >= 3 && a.closed) {
+        // تُظلَّل بعد الحفظ فقط
         L.polygon(ll, { color: '#00bcd4', weight: 3, dashArray: a.closed ? null : '6 6', fillColor: '#00e5ff', fillOpacity: a.closed ? 0.35 : 0.22, interactive: false }).addTo(areaLayer)
           .bindTooltip(`${p.name}: ${fmtAreaM2(areaM2(a.pts))}`, { permanent: true, direction: 'center', className: 'area-tip' });
-      } else L.polyline(ll, { color: '#00bcd4', weight: 3, dashArray: '6 6', interactive: false }).addTo(areaLayer);
+      } else L.polyline(ll, { color: '#00bcd4', weight: 4, dashArray: a.free ? null : '6 6', interactive: false }).addTo(areaLayer);
       if (!a.free) a.pts.forEach((q, k) => L.circleMarker([q.lat, q.lng], { radius: editing ? 6 : 4, color: '#fff', weight: 2, fillColor: '#00838f', fillOpacity: 1, interactive: false }).addTo(areaLayer)
         .bindTooltip(String(k + 1), { permanent: editing, direction: 'top', className: 'area-num' }));
     });
@@ -3702,6 +3739,7 @@
         <td class="obs-cell">${obsCellHTML(p)}</td>
         <td><span class="ll">${ll(p)}</span>${farFromOthers(i) ? '<br><small style="color:#c62828;font-weight:bold">⚠️ بعيدة جداً عن باقي الصور — تحقّق من الإحداثية</small>' : ''}${SRC_TAG[p.src] ? `<br><small style="color:#2e7d32">${SRC_TAG[p.src]}</small>` : ''}<br><button class="mini btn-del edit-c" style="color:#1f4e79">✏️ تعديل</button></td>
         <td>${p.pick ? `<span class="ll pk">${ll(p.pick)}</span><br>` : ''}</td>
+        <td class="enc-cell">${encCellHTML(p)}</td>
         <td>${d !== null ? `<span class="dist">${fmtLen(d)}</span>` : '—'}</td>
         <td><small>${p.time}</small></td>`;
       const chk = tr.querySelector('.ar-in');
@@ -3761,9 +3799,9 @@
     const n = pickedCount();
     const sp = specStats();
     document.querySelector('#pointsTable tfoot').innerHTML = n ? `
-      <tr><td colspan="6">عدد الإحداثيات المحددة: ${n} من ${points.length}</td>
+      <tr><td colspan="7">عدد الإحداثيات المحددة: ${n} من ${points.length}</td>
       <td colspan="2">متوسط المسافة: ${fmtLen(sp.dist / n)}</td></tr>
-      <tr><td colspan="6">${sp.label}</td><td colspan="2">${fmtLen(sp.dist)}</td></tr>` : '';
+      <tr><td colspan="7">${sp.label}</td><td colspan="2">${fmtLen(sp.dist)}</td></tr>` : '';
     obsSummaryRender();
 
     undoBtn.disabled = points.length === 0;
@@ -4007,7 +4045,7 @@
     // محيطات النقاط المتعددة (لكل صورة) مع مساحتها
     points.forEach(p => {
       const a = p.area; if (!a || !a.pts || a.pts.length < 2) return;
-      const ap = a.pts.map(toPx), cl = ap.length >= 3;
+      const ap = a.pts.map(toPx), cl = a.closed && ap.length >= 3;
       drawPath(ctx, ap, cl);
       if (cl) { ctx.fillStyle = 'rgba(0,188,212,.22)'; ctx.fill(); }
       ctx.setLineDash(cl ? [] : [10, 8]); ctx.strokeStyle = '#00bcd4'; ctx.lineWidth = 5; ctx.stroke(); ctx.setLineDash([]);
@@ -4070,14 +4108,14 @@
         const d = p.pick ? fmtLen(pairDist(p)) : '—';
         return `<tr><td><b>${p.name}</b><br><a data-pdf-url="${gmUrl(p)}" class="pdf-ll" dir="ltr">${ll(p)}</a></td>
           <td><img class="pt-img" src="${p.img}"></td>
-          <td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : (p.area && p.area.pts && p.area.pts.length ? '' : '—')}${p.area && p.area.pts && p.area.pts.length ? `<div dir="rtl" style="color:#006064;font-size:11px">${p.area.free ? '✍️ رسم يدوي' : '📐 ' + p.area.pts.length + ' نقاط'}${p.area.closed && p.area.pts.length >= 3 ? `<br><b>${fmtAreaM2(areaM2(p.area.pts))}</b><br>المحيط ${fmtLen(areaPerim(p.area.pts, true))}` : ' (غير مغلق)'}</div>` : ''}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
+          <td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : (p.area && p.area.pts && p.area.pts.length ? '' : '—')}${p.area && p.area.pts && p.area.pts.length ? `<div dir="rtl" style="color:#006064;font-size:11px">${p.area.free ? '✍️ رسم يدوي' : '📐 ' + p.area.pts.length + ' نقاط'}${p.area.closed && p.area.pts.length >= 3 ? `<br><b>${fmtAreaM2(areaM2(p.area.pts))}</b><br>المحيط ${fmtLen(areaPerim(p.area.pts, true))}` : ' (غير مغلق)'}</div>` : ''}</td><td>${encCellHTML(p)}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
       const rowOld = p => {
         const d = p.pick ? fmtLen(pairDist(p)) : '—';
         return `<tr><td><b>${p.name}</b></td><td dir="ltr">${ll(p)}</td><td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
       const headOld = `<thead><tr><th>النقطة</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
-      const head = `<thead><tr><th>النقطة / الإحداثيات (اضغط للفتح)</th><th>الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
+      const head = `<thead><tr><th>النقطة / الإحداثيات (اضغط للفتح)</th><th>الصورة</th><th>الإحداثية المحددة</th><th>عدد النقاط المحاطة أو المتصلة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
 
       statusEl.textContent = 'جاري تحميل صورة الخريطة...';
       const mapImg = await mapImage();
