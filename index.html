@@ -387,6 +387,7 @@
   #report .hull-tbl td { text-align: center; }
   #report .pt-img { width: 92px; height: 68px; object-fit: cover; border-radius: 4px; display: block; margin: 0 auto; }
   #report .pt-img.fix { border: 2px solid #2e7d32; }
+  #report .pdf-plus { display: inline-block; width: 46px; height: 46px; line-height: 44px; border-radius: 50%; background: #2e7d32; color: #fff; font-size: 30px; font-weight: bold; text-decoration: none; }
   #report .pdf-ll { color: #1565c0; text-decoration: underline; font-family: Arial; font-size: 11px; }
   #report .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   #report .card2 { display: flex; gap: 8px; border: 1px solid #ccd; border-radius: 6px; padding: 5px; height: 172px; overflow: hidden; font-size: 11px; text-align: right; }
@@ -405,6 +406,15 @@
   #report .sv-dedtbl td { font-size: 12.5px; padding: 5px 6px; }
   #report .sv-fixed-warn { font-size: 12px; }
   #multiBtn { background: #2e7d32; color: #fff; }
+  #fixView { position: fixed; inset: 0; z-index: 5001; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #fixView .fv-card { background: #fff; border-radius: 14px; padding: 16px; width: 100%; max-width: 440px; max-height: 92vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; text-align: center; }
+  #fixView h3 { margin: 0; color: #1b5e20; font-size: 17px; }
+  #fixView .fv-ll a { color: #1565c0; font-family: Arial; }
+  #fixView .fv-btn { background: #2e7d32; color: #fff; font-size: 15px; padding: 12px; border-radius: 10px; }
+  #fixView .fv-row { display: flex; gap: 8px; } #fixView .fv-row button { flex: 1; }
+  #fixView img { width: 100%; border-radius: 8px; border: 2px solid #2e7d32; }
+  #fixView .fv-msg { font-weight: bold; color: #1b5e20; font-size: 14px; }
+  #fixView .fv-x { background: #eceff1; color: #333; }
   #ptsView { position: fixed; inset: 0; z-index: 5000; background: #fff; display: flex; flex-direction: column; }
   #ptsView .pv-top { display: flex; gap: 8px; align-items: center; padding: 10px 12px; background: #1f4e79; color: #fff; flex-wrap: wrap; }
   #ptsView .pv-top b { flex: 1; }
@@ -3044,6 +3054,55 @@
     alert('تم اعتماد حدود الصور كحدود الحي في «مسح النظافة».');
   };
 
+  // ===== صفحة إرفاق صورة المعالجة من رابط «＋» في PDF (?fix=A&ll=lat,lng) =====
+  (function fixPage() {
+    const qs = new URLSearchParams(location.search), nm = qs.get('fix'), llq = (qs.get('ll') || '').split(',').map(Number);
+    if (!nm || llq.length !== 2 || !llq.every(isFinite)) return;
+    const [la, lo] = llq;
+    const box = document.createElement('div');
+    box.id = 'fixView';
+    box.innerHTML = `<div class="fv-card">
+      <h3>📎 إرفاق صورة المعالجة — النقطة <b>${esc(nm)}</b></h3>
+      <div dir="ltr" class="fv-ll"><a href="https://www.google.com/maps/search/?api=1&query=${la},${lo}" target="_blank" rel="noopener">🗺️ ${la}, ${lo}</a></div>
+      <button id="fvPick" class="fv-btn">📷 التقاط أو اختيار صورة المعالجة</button>
+      <input type="file" id="fvInput" accept="image/*" capture="environment" hidden>
+      <img id="fvImg" hidden>
+      <div id="fvMsg" class="fv-msg"></div>
+      <div class="fv-row"><button id="fvShare" class="fv-btn" hidden>📤 مشاركة الصورة</button><button id="fvSave" class="fv-btn" hidden>⬇️ حفظ الصورة</button></div>
+      <button id="fvClose" class="fv-x">✖ إغلاق</button></div>`;
+    document.body.appendChild(box);
+    const $ = id => document.getElementById(id);
+    let blob = null, dataUrl = null;
+    $('fvClose').onclick = () => { box.remove(); history.replaceState(null, '', location.pathname); };
+    $('fvPick').onclick = () => $('fvInput').click();
+    $('fvInput').onchange = async e => {
+      const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+      const im = await fileToImage(f), k = Math.min(1, 1000 / Math.max(im.naturalWidth, im.naturalHeight));
+      const cv = document.createElement('canvas'); cv.width = Math.round(im.naturalWidth * k); cv.height = Math.round(im.naturalHeight * k);
+      cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height);
+      // ختم الصورة: اسم النقطة وإحداثياتها ووقت المعالجة
+      const ctx = cv.getContext('2d'), fz = Math.max(14, Math.round(cv.width / 30)), t = new Date().toLocaleString('ar-SA');
+      const lines = [`معالجة النقطة ${nm}`, `${la}, ${lo}`, t], h = lines.length * fz * 1.35 + fz * 0.6;
+      ctx.fillStyle = 'rgba(0,80,0,.6)'; ctx.fillRect(0, cv.height - h, cv.width, h);
+      ctx.fillStyle = '#fff'; ctx.font = `bold ${fz}px Arial`; ctx.textBaseline = 'top'; ctx.textAlign = 'center';
+      lines.forEach((x, i) => ctx.fillText(x, cv.width / 2, cv.height - h + fz * 0.3 + i * fz * 1.35));
+      dataUrl = cv.toDataURL('image/jpeg', 0.8);
+      blob = await (await fetch(dataUrl)).blob();
+      $('fvImg').src = dataUrl; $('fvImg').hidden = false;
+      // إن كانت النقطة محفوظة على هذا الجهاز: تُرفق مباشرة في الجدول والتقرير
+      const p = points.find(q => q.name === nm && distM(q, { lat: la, lng: lo }) < 30);
+      if (p) {
+        p.fix = { img: await resizeImage(blob, 800), time: t };
+        await persist(); redraw();
+        $('fvMsg').textContent = `✔ أُرفقت صورة المعالجة للنقطة ${nm} في الجدول — صدّر PDF من جديد لتظهر فيه.`;
+      } else $('fvMsg').textContent = 'هذه النقطة غير محفوظة على هذا الجهاز — شارك الصورة مع صاحب التقرير ليرفقها من زر ＋.';
+      $('fvShare').hidden = !(navigator.canShare && navigator.canShare({ files: [new File([blob], 'x.jpg', { type: 'image/jpeg' })] }));
+      $('fvSave').hidden = false;
+    };
+    $('fvShare').onclick = async () => { try { await navigator.share({ files: [new File([blob], `معالجة_${nm}.jpg`, { type: 'image/jpeg' })], title: `معالجة النقطة ${nm}` }); } catch (e) {} };
+    $('fvSave').onclick = () => { const a = document.createElement('a'); a.href = dataUrl; a.download = `معالجة_${nm}.jpg`; document.body.appendChild(a); a.click(); a.remove(); };
+  })();
+
   // ===== عارض رابط الإحداثيات (?pts=) — يعرض كل النقاط على خريطة دون تغيير بياناتك =====
   (function ptsViewer() {
     const q = new URLSearchParams(location.search).get('pts');
@@ -3348,6 +3407,8 @@
   }
 
   // ===== إرفاق صورة المعالجة لكل صورة (＋) =====
+  // رابط «＋» في PDF: يفتح صفحة إرفاق صورة المعالجة لهذه النقطة
+  function fixUrl(p) { return location.origin + location.pathname + `?fix=${encodeURIComponent(p.name)}&ll=${(+p.lat).toFixed(6)},${(+p.lng).toFixed(6)}`; }
   function gmUrl(p) { return `https://www.google.com/maps/search/?api=1&query=${(+p.lat).toFixed(6)},${(+p.lng).toFixed(6)}`; }
   function fixCellHTML(p) {
     return p.fix
@@ -3818,7 +3879,7 @@
         const d = p.pick ? fmtLen(pairDist(p)) : '—';
         return `<tr><td><b>${p.name}</b><br><a data-pdf-url="${gmUrl(p)}" class="pdf-ll" dir="ltr">${ll(p)}</a></td>
           <td><img class="pt-img" src="${p.img}"></td>
-          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : '—'}</td>
+          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : `<a class="pdf-plus" data-pdf-url="${fixUrl(p)}">＋</a><br><small>إرفاق صورة</small>`}</td>
           <td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
       const rowOld = p => {
