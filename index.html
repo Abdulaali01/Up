@@ -385,6 +385,9 @@
   #report .card .o { direction: ltr; font-family: Arial; color: #e65100; }
   #report .km-tbl th { font-size: 11.5px; }
   #report .hull-tbl td { text-align: center; }
+  #report .pt-img { width: 92px; height: 68px; object-fit: cover; border-radius: 4px; display: block; margin: 0 auto; }
+  #report .pt-img.fix { border: 2px solid #2e7d32; }
+  #report .pdf-ll { color: #1565c0; text-decoration: underline; font-family: Arial; font-size: 11px; }
   #report .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   #report .card2 { display: flex; gap: 8px; border: 1px solid #ccd; border-radius: 6px; padding: 5px; height: 172px; overflow: hidden; font-size: 11px; text-align: right; }
   #report .card2 img { width: 190px; height: 160px; object-fit: cover; border-radius: 4px; flex: none; }
@@ -402,7 +405,18 @@
   #report .sv-dedtbl td { font-size: 12.5px; padding: 5px 6px; }
   #report .sv-fixed-warn { font-size: 12px; }
   #multiBtn { background: #2e7d32; color: #fff; }
+  #ptsView { position: fixed; inset: 0; z-index: 5000; background: #fff; display: flex; flex-direction: column; }
+  #ptsView .pv-top { display: flex; gap: 8px; align-items: center; padding: 10px 12px; background: #1f4e79; color: #fff; flex-wrap: wrap; }
+  #ptsView .pv-top b { flex: 1; }
+  #ptsView .pv-top a, #ptsView .pv-top button { background: #fff; color: #1f4e79; border-radius: 8px; padding: 8px 10px; font-size: 13px; text-decoration: none; font-weight: bold; }
+  #pvMap { flex: 1; }
+  #ptsView .pv-groups { display: flex; gap: 6px; flex-wrap: wrap; padding: 6px 10px; background: #e3f2fd; font-size: 12.5px; align-items: center; }
+  #ptsView .pv-groups:empty { display: none; }
+  #ptsView .pv-groups a { background: #1f4e79; color: #fff; border-radius: 6px; padding: 6px 9px; text-decoration: none; }
   .obs-cell { min-width: 150px; }
+  .fix-add { font-size: 26px; line-height: 1; width: 46px; height: 46px; border-radius: 50%; background: #2e7d32; color: #fff; padding: 0; }
+  .fix-cell .fix-img { width: 56px; height: 42px; object-fit: cover; border-radius: 4px; border: 2px solid #2e7d32; }
+  .gm-link { font-size: 10.5px; color: #1565c0; word-break: break-all; text-decoration: underline; }
   .obs-cell select, .obs-cell input { width: 100%; font-size: 12.5px; padding: 5px; margin: 2px 0; border: 1px solid #b0bec5; border-radius: 6px; background: #fff; }
   .obs-cell .obs-st { display: block; color: #2e7d32; font-size: 11.5px; }
   #obsSummary { margin: 10px 16px; background: #fff; border: 2px solid #6d4c41; border-radius: 12px; padding: 10px 12px; }
@@ -453,8 +467,9 @@
   <div id="hullInfo"></div>
   <div class="hull-btns">
     <button type="button" id="hullFit">🔍 عرض الحدود على الخريطة</button>
-    <button type="button" id="hullCopy">📋 نسخ إحداثيات الحدود</button>
+    <button type="button" id="hullCopy">🔗 نسخ رابط جميع الإحداثيات</button>
     <button type="button" id="hullUse">🧹 اعتمادها كحدود الحي</button>
+    <button type="button" id="hullKml">⬇️ ملف KML بكل النقاط (Google Earth / My Maps)</button>
   </div>
 </div>
 
@@ -470,6 +485,7 @@
 <input type="file" id="cameraInput" accept="image/*" capture="environment" style="display:none">
 <input type="file" id="galleryInput" accept="image/*" multiple style="display:none">
 <input type="file" id="multiInput" accept="image/*" multiple style="display:none">
+<input type="file" id="fixInput" accept="image/*" style="display:none">
 
 <!-- الكاميرا داخل الصفحة -->
 <div id="camModal">
@@ -768,7 +784,7 @@
   <div id="map"></div>
   <div class="side">
     <table id="pointsTable">
-      <thead><tr><th>النقطة</th><th>الصورة</th><th>ملاحظة النفايات</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الوقت</th></tr></thead>
+      <thead><tr><th>النقطة</th><th>الصورة</th><th>إرفاق</th><th>ملاحظة النفايات</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الوقت</th></tr></thead>
       <tbody></tbody>
       <tfoot></tfoot>
     </table>
@@ -2987,10 +3003,38 @@
   }
   document.getElementById('hullClose').onclick = () => { hullOn = false; setSetting('pm_hull', '0'); hullRender(); };
   document.getElementById('hullFit').onclick = () => hullShow(true);
+  // ملف KML بكل النقاط — يفتح في Google Earth أو Google My Maps ويعرضها كلها مهما كان عددها
+  function downloadKML(list, title) {
+    const x = t => String(t).replace(/[<&>]/g, c => ({ '<': '&lt;', '&': '&amp;', '>': '&gt;' }[c]));
+    const kml = `<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(title)}</name>\n` +
+      list.map(p => `<Placemark><name>${x(p.name)}</name>${p.time ? `<description>${x(p.time)}${p.obs ? ' — ' + x(p.obs.type) : ''}</description>` : ''}<Point><coordinates>${p.lng},${p.lat},0</coordinates></Point></Placemark>`).join('\n') +
+      `\n</Document></kml>`;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' }));
+    a.download = (title || 'points') + '.kml';
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  // رابط واحد يفتح كل الإحداثيات على الخريطة
+  // حتى 10 نقاط: رابط خرائط Google مباشرة؛ أكثر من ذلك: رابط صفحتنا يعرضها كلها (بلا حد) مع زر فتح أي نقطة في Google
+  function allCoordsLink() {
+    const ps = points.filter(p => isFinite(p.lat) && isFinite(p.lng));
+    if (!ps.length) return null;
+    const f = v => (+v).toFixed(6);
+    if (ps.length === 1) return `https://www.google.com/maps/search/?api=1&query=${f(ps[0].lat)},${f(ps[0].lng)}`;
+    if (ps.length <= 10) return 'https://www.google.com/maps/dir/' + ps.map(p => `${f(p.lat)},${f(p.lng)}`).join('/');
+    return location.origin + location.pathname + '?pts=' + ps.map(p => `${encodeURIComponent(p.name)}:${f(p.lat)},${f(p.lng)}`).join(';');
+  }
+  document.getElementById('hullKml').onclick = () => {
+    const ps = points.filter(p => isFinite(p.lat) && isFinite(p.lng));
+    if (!ps.length) { alert('لا توجد صور بإحداثيات بعد.'); return; }
+    downloadKML(ps, (sv.info.district || 'نقاط الصور'));
+  };
   document.getElementById('hullCopy').onclick = async () => {
-    const r = hullCalc(); if (r.h.length < 3) { alert('لا توجد حدود بعد.'); return; }
-    const txt = r.h.map((p, i) => `${i + 1}) ${p.name}: ${ll(p)}`).join('\n');
-    try { await navigator.clipboard.writeText(txt); alert('تم نسخ إحداثيات الحدود.'); } catch (e) { prompt('انسخ الإحداثيات:', txt.replace(/\n/g, ' | ')); }
+    const url = allCoordsLink();
+    if (!url) { alert('لا توجد صور بإحداثيات بعد.'); return; }
+    try { await navigator.clipboard.writeText(url); alert(`تم نسخ رابط ${points.length} إحداثية — الصقه وافتحه لتظهر كلها على الخريطة.`); }
+    catch (e) { prompt('انسخ الرابط:', url); }
   };
   document.getElementById('hullUse').onclick = () => {
     const r = hullCalc(); if (r.h.length < 3) { alert('تحتاج 3 صور على الأقل لرسم الحدود.'); return; }
@@ -2998,6 +3042,51 @@
     if (!svGuard('اعتماد حدود الصور كحدود الحي', `${sv.boundary.length} نقاط`, `${r.h.length} نقاط`)) return;
     sv.boundary = r.h.map(p => ({ lat: p.lat, lng: p.lng })); svSave(); svRender();
     alert('تم اعتماد حدود الصور كحدود الحي في «مسح النظافة».');
+  };
+
+  // ===== عارض رابط الإحداثيات (?pts=) — يعرض كل النقاط على خريطة دون تغيير بياناتك =====
+  (function ptsViewer() {
+    const q = new URLSearchParams(location.search).get('pts');
+    if (!q) return;
+    const list = q.split(';').map(x => { const m = x.match(/^(.*?):(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)$/); return m ? { name: decodeURIComponent(m[1]), lat: +m[2], lng: +m[3] } : null; }).filter(Boolean);
+    if (!list.length) return;
+    const box = document.createElement('div');
+    box.id = 'ptsView';
+    box.innerHTML = `<div class="pv-top"><b>📍 ${list.length} إحداثية</b>
+      <a id="pvG" target="_blank" rel="noopener">فتح في خرائط Google</a><button id="pvK">⬇️ ملف KML (كل النقاط)</button><button id="pvX">✖ إغلاق</button></div>
+      <div class="pv-groups" id="pvGroups"></div><div id="pvMap"></div>`;
+    document.body.appendChild(box);
+    const vm = L.map('pvMap', { zoomControl: true });
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 19, attribution: 'Esri' }).addTo(vm);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20, maxNativeZoom: 19 }).addTo(vm);
+    list.forEach(p => {
+      const g = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lng}`;
+      L.marker([p.lat, p.lng], { icon: L.divIcon({ className: '', html: `<div class="letter-icon">${esc(p.name)}</div>`, iconSize: [34, 34], iconAnchor: [17, 17] }) })
+        .addTo(vm).bindPopup(`<b>${esc(p.name)}</b><br><span dir="ltr">${p.lat}, ${p.lng}</span><br><a href="${g}" target="_blank" rel="noopener">فتح في خرائط Google</a>`);
+    });
+    vm.fitBounds(L.latLngBounds(list.map(p => [p.lat, p.lng])).pad(0.2), { maxZoom: 18 });
+    // خرائط Google تقبل حتى 10 نقاط في الرابط الواحد
+    document.getElementById('pvG').href = 'https://www.google.com/maps/dir/' + list.slice(0, 10).map(p => `${p.lat},${p.lng}`).join('/');
+    if (list.length > 10) {
+      // خرائط Google لا تقبل أكثر من 10 نقاط في الرابط: نقسّمها مجموعات متتالية (كل مجموعة تبدأ من آخر نقطة في السابقة)
+      document.getElementById('pvG').hidden = true;
+      const gs = [];
+      for (let i = 0; i < list.length - 1; i += 9) gs.push(list.slice(i, i + 10));
+      document.getElementById('pvGroups').innerHTML = '<span>خرائط Google (10 نقاط لكل رابط):</span>' + gs.map(g =>
+        `<a target="_blank" rel="noopener" href="https://www.google.com/maps/dir/${g.map(p => `${p.lat},${p.lng}`).join('/')}">${esc(g[0].name)} ← ${esc(g[g.length - 1].name)}</a>`).join('');
+    }
+    document.getElementById('pvK').onclick = () => downloadKML(list, 'الإحداثيات');
+    document.getElementById('pvX').onclick = () => { box.remove(); history.replaceState(null, '', location.pathname); };
+  })();
+
+  document.getElementById('fixInput').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = '';
+    const p = fixTarget; fixTarget = null;
+    if (!f || !p) return;
+    let t = null; try { const ex = readExif(await f.arrayBuffer()); if (ex && ex.date) t = ex.date.toLocaleString('ar-SA'); } catch (_) {}
+    p.fix = { img: await resizeImage(f, 800), time: t || new Date().toLocaleString('ar-SA') };
+    await persist(); redraw();
+    statusEl.textContent = `تم إرفاق صورة المعالجة للنقطة ${p.name} ✔`;
   };
 
   cameraInput.onchange = fromFileInput;
@@ -3258,6 +3347,21 @@
     else if (all.length === 1) map.setView(all[0], 18);
   }
 
+  // ===== إرفاق صورة المعالجة لكل صورة (＋) =====
+  function gmUrl(p) { return `https://www.google.com/maps/search/?api=1&query=${(+p.lat).toFixed(6)},${(+p.lng).toFixed(6)}`; }
+  function fixCellHTML(p) {
+    return p.fix
+      ? `<img src="${p.fix.img}" class="fix-img"><br><small>${esc(p.fix.time || '')}</small><br><button class="mini fix-del" title="حذف المرفق">✖</button>`
+      : `<button class="fix-add" title="إرفاق صورة المعالجة">＋</button>`;
+  }
+  let fixTarget = null;
+  function fixCellBind(td, p) {
+    td.onclick = ev => ev.stopPropagation();
+    const add = td.querySelector('.fix-add'), del = td.querySelector('.fix-del');
+    if (add) add.onclick = () => { fixTarget = p; document.getElementById('fixInput').click(); };
+    if (del) del.onclick = async () => { if (!confirm(`حذف صورة المعالجة المرفقة للنقطة ${p.name}؟`)) return; delete p.fix; await persist(); redraw(); };
+  }
+
   // ===== ملاحظة النفايات بجوار كل صورة (بدل النافذة المنبثقة) =====
   function OBS_TYPES() { return [...document.querySelectorAll('#svObsType option')].map(o => o.value || o.textContent).filter(v => v && !v.startsWith('—')); }
   // دوال مُعرّفة مسبقاً (hoisted) لأن الجدول قد يُرسم قبل الوصول لهذا الجزء
@@ -3385,6 +3489,7 @@
       tr.innerHTML = `
         <td><b>${p.name}</b><br><label class="ar-chk" title="ضمن شكل مساحة الصور فقط (لا يؤثر على نسبة المسافات)"><input type="checkbox" class="ar-in" ${p.inArea !== false ? 'checked' : ''}> مساحة ${selRank.get(p) || ''}</label></td>
         <td><img src="${p.img}"></td>
+        <td class="fix-cell">${fixCellHTML(p)}</td>
         <td class="obs-cell">${obsCellHTML(p)}</td>
         <td><span class="ll">${ll(p)}</span>${farFromOthers(i) ? '<br><small style="color:#c62828;font-weight:bold">⚠️ بعيدة جداً عن باقي الصور — تحقّق من الإحداثية</small>' : ''}${SRC_TAG[p.src] ? `<br><small style="color:#2e7d32">${SRC_TAG[p.src]}</small>` : ''}<br><button class="mini btn-del edit-c" style="color:#1f4e79">✏️ تعديل</button></td>
         <td>${p.pick ? `<span class="ll pk">${ll(p.pick)}</span><br>` : ''}</td>
@@ -3401,7 +3506,10 @@
       };
       tr.querySelector('.edit-c').onclick = ev => { ev.stopPropagation(); editCoords(i); };
       obsCellBind(tr.querySelector('.obs-cell'), p);
-      const cell = tr.children[4];
+      fixCellBind(tr.querySelector('.fix-cell'), p);
+      tr.children[0].insertAdjacentHTML('beforeend', `<br><a class="gm-link" href="${gmUrl(p)}" target="_blank" rel="noopener" dir="ltr">🗺️ ${ll(p)}</a>`);
+      tr.children[0].querySelector('.gm-link').onclick = ev => ev.stopPropagation();
+      const cell = tr.children[5];
       const b1 = document.createElement('button');
       b1.className = 'mini btn-pick';
       b1.textContent = p.pick ? '📍 تغيير' : '📍 تحديد';
@@ -3420,9 +3528,9 @@
     const n = pickedCount();
     const sp = specStats();
     document.querySelector('#pointsTable tfoot').innerHTML = n ? `
-      <tr><td colspan="5">عدد الإحداثيات المحددة: ${n} من ${points.length}</td>
+      <tr><td colspan="6">عدد الإحداثيات المحددة: ${n} من ${points.length}</td>
       <td colspan="2">متوسط المسافة: ${fmtLen(sp.dist / n)}</td></tr>
-      <tr><td colspan="5">${sp.label}</td><td colspan="2">${fmtLen(sp.dist)}</td></tr>` : '';
+      <tr><td colspan="6">${sp.label}</td><td colspan="2">${fmtLen(sp.dist)}</td></tr>` : '';
     obsSummaryRender();
 
     undoBtn.disabled = points.length === 0;
@@ -3705,16 +3813,25 @@
       const pages = [];
       const district = sv.info.district ? esc(sv.info.district) : '';
 
+      // جدول PDF: العمود الأول إحداثيات قابلة للفتح، ثم الصورة، ثم «إرفاق» (صورة المعالجة) بدل الملاحظات
       const row = p => {
+        const d = p.pick ? fmtLen(pairDist(p)) : '—';
+        return `<tr><td><b>${p.name}</b><br><a data-pdf-url="${gmUrl(p)}" class="pdf-ll" dir="ltr">${ll(p)}</a></td>
+          <td><img class="pt-img" src="${p.img}"></td>
+          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : '—'}</td>
+          <td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
+      };
+      const rowOld = p => {
         const d = p.pick ? fmtLen(pairDist(p)) : '—';
         return `<tr><td><b>${p.name}</b></td><td dir="ltr">${ll(p)}</td><td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
-      const head = `<thead><tr><th>النقطة</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
+      const headOld = `<thead><tr><th>النقطة</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
+      const head = `<thead><tr><th>النقطة / الإحداثيات (اضغط للفتح)</th><th>الصورة</th><th>إرفاق</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
 
       statusEl.textContent = 'جاري تحميل صورة الخريطة...';
       const mapImg = await mapImage();
       statusEl.textContent = 'جاري إنشاء ملف PDF...';
-      const firstRows = 12, nextRows = 34;
+      const firstRows = 5, nextRows = 13;   // صفوف أطول لأن فيها صورة الموقع وصورة المعالجة
       pages.push(`
         <h2>جدول إحداثيات النقاط${district ? ' — ' + district : ''}</h2>
         <div class="meta">${district ? 'الحي: <b>' + district + '</b> — ' : ''}عدد النقاط: ${points.length}<br>تاريخ التقرير: ${new Date().toLocaleString('ar-SA')}</div>
@@ -3805,6 +3922,14 @@
         const h = Math.min(canvas.height * w / canvas.width, pageH - margin * 2);
         if (c > 0) pdf.addPage();
         pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', margin, margin, w, h);
+        // روابط قابلة للضغط فوق الإحداثيات (تفتح خرائط Google)
+        if (pdf.link) {
+          const rr = report.getBoundingClientRect(), k = w / rr.width;
+          report.querySelectorAll('[data-pdf-url]').forEach(a => {
+            const b = a.getBoundingClientRect(), y = margin + (b.top - rr.top) * k;
+            if (y + b.height * k <= margin + h) pdf.link(margin + (b.left - rr.left) * k, y, b.width * k, b.height * k, { url: a.dataset.pdfUrl });
+          });
+        }
       }
       pdf.save('إحداثيات_النقاط.pdf');
       statusEl.textContent = 'تم تصدير ملف PDF ✔';
