@@ -497,8 +497,8 @@
 </div>
 
 <div class="options">
-  <span>نوع الرسم:</span>
-  <span class="seg" id="shapeSeg">
+  <span hidden>نوع الرسم:</span>
+  <span class="seg" id="shapeSeg" hidden>
     <button data-s="closed">⬠ شكل مغلق (أرض)</button>
     <button data-s="open">〰 مسار مفتوح (طريق)</button>
   </span>
@@ -1013,6 +1013,7 @@
   });
   map.addControl(new NorthControl());
 
+  const NO_BLUE = true;   // بطلب المستخدم: لا يُرسم الشكل الأزرق الذي يصل بين الصور
   const shape = L.polygon([], { color: '#3b3bff', weight: 6, fillColor: '#3b3bff', fillOpacity: 0.12 }).addTo(map);
   const line = L.polyline([], { color: '#3b3bff', weight: 6 }).addTo(map);
   const NO_ORANGE = true;   // بطلب المستخدم: إلغاء كل الرسم البرتقالي من الخريطة وصورة PDF
@@ -3591,6 +3592,7 @@
   }
 
   function redraw(fit) {
+    if (NO_BLUE) setTimeout(() => { shape.setLatLngs([]); line.setLatLngs([]); }, 0);
     if (typeof hullRender === 'function') setTimeout(() => { try { hullRender(); } catch (e) {} }, 0);
     setTimeout(() => { try { drawAreas(); } catch (e) {} }, 0);
     const pc = photoCoords().map(c => [c.lat, c.lng]);
@@ -3673,8 +3675,9 @@
       const cell = tr.children[5];
       const b1 = document.createElement('button');
       b1.className = 'mini btn-pick';
-      b1.textContent = p.pick ? '📍 تغيير' : '📍 تحديد';
-      b1.onclick = ev => { ev.stopPropagation(); startPick(i); };
+      b1.textContent = (p.area && p.area.pts && p.area.pts.length) ? '📍 تعديل النقاط' : '📍 تحديد';
+      // الزر البرتقالي: تحديد عدة نقاط للصورة وتُظلَّل المنطقة بينها
+      b1.onclick = ev => { ev.stopPropagation(); startArea(i); };
       cell.appendChild(b1);
       // تحديد أكثر من نقطة لنفس الصورة ثم إغلاقها لحساب مساحة المحيط
       const ar0 = p.area && p.area.pts && p.area.pts.length ? p.area : null;
@@ -3688,6 +3691,7 @@
       }
       const b3 = document.createElement('button');
       b3.className = 'mini btn-area';
+      b3.hidden = true;   // دُمج في الزر البرتقالي «📍 تحديد»
       b3.textContent = ar0 ? '📐 تعديل المحيط' : '📐 عدة نقاط';
       b3.onclick = ev => { ev.stopPropagation(); startArea(i); };
       cell.appendChild(b3);
@@ -3915,10 +3919,12 @@
 
     const closed = isClosed();
     const pp = points.map(p => toPx(p));
-    // الشكل الأزرق (الصور)
+    // الشكل الأزرق (الصور) — أُلغي بطلب المستخدم
+    if (!NO_BLUE) {
     drawPath(ctx, pp, closed);
     if (closed && pp.length >= 3) { ctx.fillStyle = 'rgba(59,59,255,.15)'; ctx.fill(); }
     ctx.setLineDash([]); ctx.strokeStyle = '#3b3bff'; ctx.lineWidth = 7; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke();
+    }
 
     // حدود الصور المُدرجة (أخضر)
     if (hullOn) {
