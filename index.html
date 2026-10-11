@@ -3883,7 +3883,7 @@
         const d = p.pick ? fmtLen(pairDist(p)) : '—';
         return `<tr><td><b>${p.name}</b><br><a data-pdf-url="${gmUrl(p)}" class="pdf-ll" dir="ltr">${ll(p)}</a></td>
           <td><img class="pt-img" src="${p.img}"></td>
-          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : `<div class="pdf-fixbox" data-pdf-fix="${points.indexOf(p)}"><span>＋</span><small>اضغط لإرفاق صورة</small></div>`}</td>
+          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : `<div class="pdf-fixbox" data-pdf-url="${fixUrl(p)}"><span>＋</span><small>اضغط لإرفاق صورة</small></div>`}</td>
           <td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
       const rowOld = p => {
