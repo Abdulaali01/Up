@@ -387,6 +387,9 @@
   #report .hull-tbl td { text-align: center; }
   #report .pt-img { width: 92px; height: 68px; object-fit: cover; border-radius: 4px; display: block; margin: 0 auto; }
   #report .pt-img.fix { border: 2px solid #2e7d32; }
+  #report .pdf-fixbox { width: 110px; height: 80px; margin: 0 auto; border: 2px dashed #2e7d32; border-radius: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #2e7d32; background: #f1f8e9; }
+  #report .pdf-fixbox span { font-size: 34px; font-weight: bold; line-height: 1; }
+  #report .pdf-fixbox small { font-size: 9.5px; }
   #report .pdf-plus { display: inline-block; width: 46px; height: 46px; line-height: 44px; border-radius: 50%; background: #2e7d32; color: #fff; font-size: 30px; font-weight: bold; text-decoration: none; }
   #report .pdf-ll { color: #1565c0; text-decoration: underline; font-family: Arial; font-size: 11px; }
   #report .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -424,6 +427,7 @@
   #ptsView .pv-groups:empty { display: none; }
   #ptsView .pv-groups a { background: #1f4e79; color: #fff; border-radius: 6px; padding: 6px 9px; text-decoration: none; }
   .obs-cell { min-width: 150px; }
+  #pointsTable .fix-th, #pointsTable .fix-cell { display: none; }   /* زر ＋ أُلغي من الموقع — الإرفاق داخل ملف PDF */
   .fix-add { font-size: 26px; line-height: 1; width: 46px; height: 46px; border-radius: 50%; background: #2e7d32; color: #fff; padding: 0; }
   .fix-cell .fix-img { width: 56px; height: 42px; object-fit: cover; border-radius: 4px; border: 2px solid #2e7d32; }
   .gm-link { font-size: 10.5px; color: #1565c0; word-break: break-all; text-decoration: underline; }
@@ -794,7 +798,7 @@
   <div id="map"></div>
   <div class="side">
     <table id="pointsTable">
-      <thead><tr><th>النقطة</th><th>الصورة</th><th>إرفاق</th><th>ملاحظة النفايات</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الوقت</th></tr></thead>
+      <thead><tr><th>النقطة</th><th>الصورة</th><th class="fix-th">إرفاق</th><th>ملاحظة النفايات</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الوقت</th></tr></thead>
       <tbody></tbody>
       <tfoot></tfoot>
     </table>
@@ -3879,7 +3883,7 @@
         const d = p.pick ? fmtLen(pairDist(p)) : '—';
         return `<tr><td><b>${p.name}</b><br><a data-pdf-url="${gmUrl(p)}" class="pdf-ll" dir="ltr">${ll(p)}</a></td>
           <td><img class="pt-img" src="${p.img}"></td>
-          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : `<a class="pdf-plus" data-pdf-url="${fixUrl(p)}">＋</a><br><small>إرفاق صورة</small>`}</td>
+          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : `<div class="pdf-fixbox" data-pdf-fix="${points.indexOf(p)}"><span>＋</span><small>اضغط لإرفاق صورة</small></div>`}</td>
           <td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
       const rowOld = p => {
@@ -3983,6 +3987,28 @@
         const h = Math.min(canvas.height * w / canvas.width, pageH - margin * 2);
         if (c > 0) pdf.addPage();
         pdf.addImage(canvas.toDataURL('image/jpeg', 0.85), 'JPEG', margin, margin, w, h);
+        // حقول «إرفاق صورة» داخل ملف PDF: زر يضغطه المستخدم فيختار صورة من جهازه وتظهر مكانه
+        const fixBoxes = report.querySelectorAll('[data-pdf-fix]');
+        if (fixBoxes.length) {
+          const PB = (window.jspdf && (window.jspdf.AcroFormPushButton || (window.jspdf.jsPDF && window.jspdf.jsPDF.API && window.jspdf.jsPDF.API.AcroFormPushButton))) || null;
+          if (PB && pdf.addField) {
+            const rr = report.getBoundingClientRect(), k = w / rr.width;
+            // JavaScript داخل PDF (بصيغة hex لتجنب الأقواس): عرض الصورة فقط ثم فتح اختيار الصورة
+            const js = 'event.target.buttonPosition = position.iconOnly; event.target.buttonScaleWhen = scaleWhen.always; event.target.buttonImportIcon();';
+            const hex = [...new TextEncoder().encode(js)].map(b => b.toString(16).padStart(2, '0')).join('');
+            fixBoxes.forEach(el => {
+              const b = el.getBoundingClientRect(), y = margin + (b.top - rr.top) * k;
+              if (y + b.height * k > margin + h) return;
+              try {
+                const btn = new PB();
+                btn.fieldName = 'fix_' + el.dataset.pdfFix + '_' + c;
+                btn.x = margin + (b.left - rr.left) * k; btn.y = y; btn.width = b.width * k; btn.height = b.height * k;
+                Object.defineProperty(btn, 'A', { value: `<< /S /JavaScript /JS <${hex}> >>`, enumerable: true, configurable: false, writable: false });
+                pdf.addField(btn);
+              } catch (e) { console.warn('fix field', e); }
+            });
+          }
+        }
         // روابط قابلة للضغط فوق الإحداثيات (تفتح خرائط Google)
         if (pdf.link) {
           const rr = report.getBoundingClientRect(), k = w / rr.width;
