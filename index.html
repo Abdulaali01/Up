@@ -106,7 +106,7 @@
   /* ===== عناصر محذوفة من الواجهة (حسب طلب المستخدم) — تبقى نسبة النظافة أعلى الصفحة ===== */
   [hidden], #summary, #summary.show, #arCard, #arCard.show, #arResult, #arResult.show, #calcBox, #expLabel, #circleCard, #circleCard.open,
   #fieldCard, #fieldCard.open, #fsNear, #fsNear.show, #arConfirm, #arConfirm.show, #modeBox,
-  #captureBtn, #svBtn, #svRounds,
+  #svBtn, #svRounds,
   #svTop, label:has(#autoPick), #svObsSheet, #svDupSheet { display: none !important; }   /* + نسبة/شدة التدني أعلى الصفحة، عدّاد الملاحظات، «حدّد إحداثية ثانية»، النافذة المنبثقة للملاحظة */   /* أُخفيت بطلب المستخدم: زر التقاط صورة، زر مسح النظافة، جدول الجولات والملخص العام */
   body.has-ar { padding-bottom: 0; }
   #svTop { margin: 0 16px 8px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
@@ -422,6 +422,7 @@
   .hull-sum { background: #e8f5e9; border-radius: 8px; padding: 8px; line-height: 1.8; }
   .hull-btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
   .hull-btns button { flex: 1 1 140px; background: #e8f5e9; color: #1b5e20; font-size: 13px; }
+  .pick-icon { display: none !important; }   /* علامات الإحداثية الثانية البرتقالية — أُلغيت بطلب المستخدم */
 </style>
 </head>
 <body>
@@ -435,7 +436,7 @@
 </header>
 
 <div class="bar">
-  <button id="captureBtn">📷 التقاط صورة / نقطة</button>
+  <button id="captureBtn">📷 التقاط صورة بالإحداثيات</button>
   <button id="pdfBtn" disabled>📄 تصدير PDF</button>
   <button id="undoBtn" disabled>↶ تراجع</button>
   <button id="clearBtn">مسح</button>
@@ -973,6 +974,7 @@
 
   const shape = L.polygon([], { color: '#3b3bff', weight: 6, fillColor: '#3b3bff', fillOpacity: 0.12 }).addTo(map);
   const line = L.polyline([], { color: '#3b3bff', weight: 6 }).addTo(map);
+  const NO_ORANGE = true;   // بطلب المستخدم: إلغاء كل الرسم البرتقالي من الخريطة وصورة PDF
   const pickShape = L.polygon([], { color: '#ef6c00', weight: 4, dashArray: '10 8', fillColor: '#ef6c00', fillOpacity: 0.18 }).addTo(map);
   const pickLine = L.polyline([], { color: '#ef6c00', weight: 4, dashArray: '10 8' }).addTo(map);
   const trackLine = L.polyline([], { color: '#00e676', weight: 3, opacity: 0.95 }).addTo(map);
@@ -2307,6 +2309,7 @@
   function svDrawMap(r) {
     svLayer.clearLayers();
     if (svBoundLayer) { map.removeLayer(svBoundLayer); svBoundLayer = null; }
+    if (NO_ORANGE) { if (sv.drawing) { sv.drawing = false; document.body.classList.remove('sv-drawing'); } return; }
     if (sv.boundary.length) {
       const ll = sv.boundary.map(p => [p.lat, p.lng]);
       svBoundLayer = (sv.boundary.length >= 3 && !sv.drawing ? L.polygon(ll, { color: '#ef6c00', weight: 3, dashArray: '8 6', fillOpacity: 0.04 })
@@ -2405,7 +2408,7 @@
 
   // ---- رسم حدود الحي ----
   map.on('click', e => {
-    if (!sv.drawing) return;
+    if (!sv.drawing || NO_ORANGE) return;
     sv.boundary.push({ lat: e.latlng.lat, lng: e.latlng.lng });
     svSave(); svRender();
   });
@@ -2784,6 +2787,13 @@
     const W = im.naturalWidth, H = im.naturalHeight;
     // نجرب أعلى الصورة ثم أسفلها، بتنظيف للنص الأبيض أولاً ثم بدونه
     const regions = [[0, 0, W, H * 0.45], [0, H * 0.55, W, H * 0.45]];
+    // محاولة سريعة أولاً: الشريط العلوي فقط (مكان الإحداثيات في أغلب تطبيقات كاميرا GPS) — أصغر فتُقرأ أسرع
+    {
+      const qh = H * 0.2, k = 1000 / W, cv = document.createElement('canvas');
+      cv.width = 1000; cv.height = Math.max(1, Math.round(qh * k));
+      const cx = cv.getContext('2d'); cx.drawImage(im, 0, 0, W, qh, 0, 0, cv.width, cv.height);
+      try { const { data } = await worker.recognize(cv); const c = parseCoords(data.text || ''); if (c) return c; } catch (e) {}
+    }
     for (const clean of [true, false]) {
       for (const [x, y, w, h] of regions) {
         const k = 1400 / w;
@@ -2860,7 +2870,8 @@
 
       // 1) الإحداثيات المكتوبة على الصورة
       let oc = null;
-      if (!ocrDown) {
+      // تسريع الإرفاق: الصورة التي فيها موقع داخلي لا تحتاج قراءة النص (أبطأ خطوة)
+      if (!ocrDown && !hasGps(it)) {
         statusEl.textContent = `جاري قراءة الإحداثيات المكتوبة على الصورة ${batch ? (i + 1) + ' من ' + items.length : ''}... (أول مرة تأخذ وقتاً أطول)`;
         try { oc = await ocrCoords(it.f); } catch (e) { ocrDown = true; }
       }
@@ -2884,20 +2895,23 @@
         // 2) الموقع المحفوظ داخل الصورة
         await addPoint(img, { latitude: it.ex.lat, longitude: it.ex.lng, accuracy: it.ex.acc }, { time, src: 'exif', noPick: batch });
         fromPhoto++;
-      } else if (multiBounds) {
-        failed++;   // إدراج الصور المتعددة: الصورة بلا إحداثيات لا تُضاف (لا نستخدم موقعك الحالي)
       } else if (await getHereOnce()) {
         // 3) موقعك الحالي
         await addPoint(img, here, { time, src: 'gps', noPick: batch });
         fromHere++;
-      } else failed++;
+      } else {
+        // لا تُتجاهل أي صورة: تُوضع عند آخر صورة (أو وسط الخريطة) وتُعلَّم لتعديل إحداثيتها
+        const ref = points.length ? points[points.length - 1] : (() => { const c = map.getCenter(); return { lat: c.lat, lng: c.lng }; })();
+        await addPoint(img, { latitude: ref.lat, longitude: ref.lng, accuracy: null }, { time, src: 'nocoord', noPick: batch });
+        failed++;
+      }
     }
 
     const parts = [];
     if (fromText) parts.push(`${fromText} من الإحداثيات المكتوبة على الصورة 📝`);
     if (fromPhoto) parts.push(`${fromPhoto} من موقع التصوير داخل الصورة 📷`);
     if (fromHere) parts.push(`${fromHere} من موقعك الحالي (الصورة بلا موقع)`);
-    if (failed) parts.push(multiBounds ? `${failed} لم تُضف لعدم وجود إحداثيات فيها` : `${failed} لم تُضف لتعذّر تحديد الموقع`);
+    if (failed) parts.push(`⚠️ ${failed} بلا إحداثيات — أُضيفت ووُضعت عند آخر صورة، صحّح موقعها من «✏️ تعديل»`);
     if (ocrDown) parts.push('تعذّر تشغيل قارئ النص — تأكد من الإنترنت');
     if (fixedList.length) parts.push(`🔧 صُحّحت قراءة: ${fixedList.join(' ، ')}`);
     if (suspicious.length) parts.push(`⚠️ تجاهلت قراءة غير منطقية (${suspicious.join(' ، ')}) — تبعد أكثر من ${OCR_MAX_KM} كم؛ صحّحها من «✏️ تعديل»`);
@@ -3068,10 +3082,50 @@
     camModal.classList.remove('review');
     camModal.classList.add('open');
     document.getElementById('camTitle').textContent = `التقاط النقطة ${letter(points.length)}`;
+    camSession = []; camMsg.style.display = ''; camMsg.textContent = '';
+    // متابعة الموقع طوال فتح الكاميرا حتى يُحفظ كل التقاط فوراً بإحداثياته
+    if (navigator.geolocation && camGeoId === null)
+      camGeoId = navigator.geolocation.watchPosition(pos => { camFix = { c: pos.coords, t: Date.now() }; }, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 });
     await startStream(camId);
   }
 
+  // ===== التقاط متعدد: كل ضغطة تحفظ صورة جديدة بإحداثياتها مكتوبة عليها، والكاميرا تبقى مفتوحة =====
+  let camGeoId = null, camFix = null, camSession = [], camBusy = Promise.resolve();
+  function camWhere() {
+    if (camFix && Date.now() - camFix.t < 15000) return Promise.resolve(camFix.c);
+    return new Promise(res => {
+      if (!navigator.geolocation) return res(null);
+      navigator.geolocation.getCurrentPosition(p => { camFix = { c: p.coords, t: Date.now() }; res(p.coords); }, () => res(null), { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 });
+    });
+  }
+  // كتابة الإحداثيات والوقت على الصورة (مثل تطبيقات كاميرا GPS)
+  function stampPhoto(cv, c) {
+    const ctx = cv.getContext('2d'), fs0 = Math.max(14, Math.round(cv.width / 32));
+    const lines = [c ? `${(+c.latitude).toFixed(8)}, ${(+c.longitude).toFixed(8)}` : 'بدون إحداثيات', new Date().toLocaleString('ar-SA') + (c && c.accuracy ? `  ±${Math.round(c.accuracy)} م` : '')];
+    const h = lines.length * fs0 * 1.35 + fs0 * 0.6;
+    ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, cv.height - h, cv.width, h);
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${fs0}px Arial`; ctx.textBaseline = 'top'; ctx.direction = 'ltr'; ctx.textAlign = 'left';
+    lines.forEach((t, i) => ctx.fillText(t, fs0 * 0.5, cv.height - h + fs0 * 0.3 + i * fs0 * 1.35));
+  }
+  async function camSaveShot(cv) {
+    const c = await camWhere();
+    stampPhoto(cv, c);
+    const data = cv.toDataURL('image/jpeg', 0.75);
+    if (c) await addPoint(data, c, { noPick: true });
+    else {   // لا تُتجاهل الصورة: تُحفظ عند آخر صورة وتُعلَّم للتصحيح
+      const ref = points.length ? points[points.length - 1] : (() => { const m = map.getCenter(); return { lat: m.lat, lng: m.lng }; })();
+      await addPoint(data, { latitude: ref.lat, longitude: ref.lng, accuracy: null }, { noPick: true, src: 'nocoord' });
+    }
+    const p = points[points.length - 1];
+    camSession.push(p);
+    camMsg.textContent = `✔ حُفظت ${p.name}${c ? '' : ' (بلا إحداثيات)'} — عدد الصور: ${camSession.length}. التقط التالية أو اضغط ✖ للإنهاء.`;
+    camMsg.style.display = 'block';
+    document.getElementById('camTitle').textContent = `التقاط متعدد — ${camSession.length} صورة (التالية ${letter(points.length)})`;
+  }
+
   function closeCamera() {
+    if (camGeoId !== null) { try { navigator.geolocation.clearWatch(camGeoId); } catch (e) {} camGeoId = null; }
+    if (camSession.length) { const ss = camSession; camSession = []; camBusy.then(() => flyToPhotos(ss)); }
     stopStream();
     camModal.classList.remove('open', 'review');
     camVideo.srcObject = null;
@@ -3098,6 +3152,11 @@
     const cv = document.createElement('canvas');
     cv.width = Math.round(w * k); cv.height = Math.round(h * k);
     cv.getContext('2d').drawImage(camVideo, 0, 0, cv.width, cv.height);
+    if (navigator.vibrate) navigator.vibrate(40);
+    // التقاط متعدد: حفظ مباشر بلا شاشة مراجعة، والكاميرا تبقى مفتوحة
+    camVideo.style.opacity = '.3'; setTimeout(() => { camVideo.style.opacity = ''; }, 120);
+    camBusy = camBusy.then(() => camSaveShot(cv)).catch(e => { camMsg.textContent = 'تعذّر حفظ الصورة: ' + e.message; });
+    return;
     shotData = cv.toDataURL('image/jpeg', 0.75);
     camShot.src = shotData;
     camModal.classList.add('review');
@@ -3131,8 +3190,8 @@
     svQueuePhoto(points.length - 1);   // مسح النظافة: تسجيل نوع وشدة الملاحظة (عند تشغيل الوضع فقط)
     if (autoPick.checked && !opt.noPick) startPick(points.length - 1);
   }
-  const SRC_TAG = { ocr: '📝 من نص الصورة', ocrfix: '📝 من نص الصورة (صُحّح رقم ضائع)', exif: '📷 من الصورة', edit: '✏️ معدّلة يدوياً' };
-  const accText = p => p.acc != null ? p.acc : ({ ocr: 'نص الصورة', ocrfix: 'نص الصورة (مصحّح)', exif: 'من الصورة', edit: 'يدوي' }[p.src] || '—');
+  const SRC_TAG = { ocr: '📝 من نص الصورة', ocrfix: '📝 من نص الصورة (صُحّح رقم ضائع)', exif: '📷 من الصورة', edit: '✏️ معدّلة يدوياً', nocoord: '⚠️ بلا إحداثيات — صحّحها' };
+  const accText = p => p.acc != null ? p.acc : ({ ocr: 'نص الصورة', ocrfix: 'نص الصورة (مصحّح)', exif: 'من الصورة', edit: 'يدوي', nocoord: 'بلا إحداثيات' }[p.src] || '—');
 
   // تعديل إحداثيات الصورة يدوياً (لتصحيح أي قراءة خاطئة)
   // صورة تبعد أكثر من 50 كم عن كل الصور الأخرى = غالباً خطأ في القراءة
@@ -3275,7 +3334,8 @@
 
     const hasPick = pickedCount() > 0;
     const kc = pickedCoords().map(c => [c.lat, c.lng]);
-    if (hasPick && isClosed() && kc.length >= 3) { pickShape.setLatLngs(kc); pickLine.setLatLngs([]); }
+    if (NO_ORANGE) { pickShape.setLatLngs([]); pickLine.setLatLngs([]); }
+    else if (hasPick && isClosed() && kc.length >= 3) { pickShape.setLatLngs(kc); pickLine.setLatLngs([]); }
     else if (hasPick) { pickShape.setLatLngs([]); pickLine.setLatLngs(kc); }
     else { pickShape.setLatLngs([]); pickLine.setLatLngs([]); }
 
@@ -3525,7 +3585,7 @@
     }
 
     // مسح النظافة: حدود الحي (برتقالي متقطع) وتلوين القطاعات حسب حالتها
-    if (sv.on) {
+    if (sv.on && !NO_ORANGE) {
       if (sv.boundary.length >= 3) {
         drawPath(ctx, sv.boundary.map(toPx), true);
         ctx.fillStyle = 'rgba(239,108,0,.06)'; ctx.fill();
@@ -3579,7 +3639,7 @@
     }
 
     // الشكل البرتقالي (المحدد)
-    if (pickedCount()) {
+    if (pickedCount() && !NO_ORANGE) {
       const kp = pickedCoords().map(toPx);
       drawPath(ctx, kp, closed);
       if (closed && kp.length >= 3) { ctx.fillStyle = 'rgba(239,108,0,.2)'; ctx.fill(); }
@@ -3602,7 +3662,7 @@
 
     // علامات المحدد
     points.forEach(p => {
-      if (!p.pick) return;
+      if (!p.pick || NO_ORANGE) return;
       const [x, y] = toPx(p.pick);
       const w = rad * 2.2, h = rad * 1.6;
       ctx.fillStyle = '#ef6c00'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
