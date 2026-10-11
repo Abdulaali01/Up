@@ -322,7 +322,8 @@
   /* شريط التحديد على الخريطة */
   #pickBar { display: none; margin: 0 16px 8px; background: #fff3e0; border: 2px solid #ef6c00; color: #8a3b00;
     border-radius: 10px; padding: 10px 12px; font-weight: bold; font-size: 14px; align-items: center; gap: 10px; justify-content: space-between; }
-  #pickBar.show { display: flex; }
+  #pickBar.show { display: flex; flex-wrap: wrap; position: sticky; top: 4px; z-index: 1200; box-shadow: 0 4px 14px rgba(0,0,0,.18); }
+  #pickBar #pickText { flex: 1 1 100%; }
   #pickBar button { background: #ef6c00; color: #fff; padding: 8px 14px; font-size: 13px; }
   body.picking #map { cursor: crosshair; outline: 3px solid #ef6c00; }
 
@@ -3415,7 +3416,7 @@
   function fmtAreaM2(m2) { return Math.round(m2).toLocaleString('en') + ' م²' + (m2 >= 10000 ? ` (${(Math.round(m2 / 100) / 100).toLocaleString('en')} هكتار)` : ''); }
   function areaBarText() {
     const p = points[areaTarget], n = p.area.pts.length;
-    document.getElementById('pickText').textContent = `📐 اضغط على الخريطة لإضافة نقاط محيط ${p.name} — عدد النقاط: ${n}${n >= 3 ? ` — المساحة لو أُغلق: ${fmtAreaM2(areaM2(p.area.pts))}` : ''}`;
+    document.getElementById('pickText').textContent = `📐 اضغط على الخريطة لإضافة نقاط محيط ${p.name} — عدد النقاط: ${n}${n >= 3 ? ` — المساحة: ${fmtAreaM2(areaM2(p.area.pts))} — للإغلاق اضغط «🔒 إغلاق» أو اضغط على النقطة 1` : ''}`;
     document.getElementById('areaUndo').hidden = !n;
     document.getElementById('areaClose').hidden = n < 3;
   }
@@ -3456,6 +3457,11 @@
   map.on('click', async e => {
     if (areaTarget === null) return;
     const p = points[areaTarget];
+    // الضغط قرب النقطة الأولى يغلق المحيط مباشرة
+    if (p.area.pts.length >= 3) {
+      const f = map.latLngToContainerPoint([p.area.pts[0].lat, p.area.pts[0].lng]), c = map.latLngToContainerPoint(e.latlng);
+      if (Math.hypot(f.x - c.x, f.y - c.y) < 22) { document.getElementById('areaClose').onclick(); return; }
+    }
     p.area.pts.push({ lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) });
     await persist(); redraw(); areaBarText();
   });
@@ -3466,10 +3472,11 @@
       const a = p.area; if (!a || !a.pts || !a.pts.length) return;
       const ll = a.pts.map(q => [q.lat, q.lng]);
       const editing = areaTarget === i;
-      if (a.closed && ll.length >= 3) {
-        L.polygon(ll, { color: '#00bcd4', weight: 3, fillColor: '#00bcd4', fillOpacity: 0.2 }).addTo(areaLayer)
+      if (ll.length >= 3) {
+        // مظلّلة دائماً من 3 نقاط: متقطعة أثناء الرسم، ثابتة بعد الإغلاق
+        L.polygon(ll, { color: '#00bcd4', weight: 3, dashArray: a.closed ? null : '6 6', fillColor: '#00e5ff', fillOpacity: a.closed ? 0.35 : 0.22, interactive: false }).addTo(areaLayer)
           .bindTooltip(`${p.name}: ${fmtAreaM2(areaM2(a.pts))}`, { permanent: true, direction: 'center', className: 'area-tip' });
-      } else L.polyline(ll, { color: '#00bcd4', weight: 3, dashArray: '6 6' }).addTo(areaLayer);
+      } else L.polyline(ll, { color: '#00bcd4', weight: 3, dashArray: '6 6', interactive: false }).addTo(areaLayer);
       a.pts.forEach((q, k) => L.circleMarker([q.lat, q.lng], { radius: editing ? 6 : 4, color: '#fff', weight: 2, fillColor: '#00838f', fillOpacity: 1, interactive: false }).addTo(areaLayer)
         .bindTooltip(String(k + 1), { permanent: editing, direction: 'top', className: 'area-num' }));
     });
@@ -3948,7 +3955,7 @@
     // محيطات النقاط المتعددة (لكل صورة) مع مساحتها
     points.forEach(p => {
       const a = p.area; if (!a || !a.pts || a.pts.length < 2) return;
-      const ap = a.pts.map(toPx), cl = a.closed && ap.length >= 3;
+      const ap = a.pts.map(toPx), cl = ap.length >= 3;
       drawPath(ctx, ap, cl);
       if (cl) { ctx.fillStyle = 'rgba(0,188,212,.22)'; ctx.fill(); }
       ctx.setLineDash(cl ? [] : [10, 8]); ctx.strokeStyle = '#00bcd4'; ctx.lineWidth = 5; ctx.stroke(); ctx.setLineDash([]);
