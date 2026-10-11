@@ -3885,7 +3885,6 @@
         const d = p.pick ? fmtLen(pairDist(p)) : '—';
         return `<tr><td><b>${p.name}</b><br><a data-pdf-url="${gmUrl(p)}" class="pdf-ll" dir="ltr">${ll(p)}</a></td>
           <td><img class="pt-img" src="${p.img}"></td>
-          <td>${p.fix ? `<img class="pt-img fix" src="${p.fix.img}"><br><small>${esc(p.fix.time || '')}</small>` : `<div class="pdf-fixbox" data-pdf-fix="${points.indexOf(p)}"><span>＋</span><small>صورة المعالجة</small></div>`}</td>
           <td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
       const rowOld = p => {
@@ -3893,17 +3892,15 @@
         return `<tr><td><b>${p.name}</b></td><td dir="ltr">${ll(p)}</td><td dir="ltr" style="color:#e65100">${p.pick ? ll(p.pick) : '—'}</td><td><b>${d}</b></td><td>${accText(p)}</td><td>${p.time}</td></tr>`;
       };
       const headOld = `<thead><tr><th>النقطة</th><th>إحداثيات الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
-      const head = `<thead><tr><th>النقطة / الإحداثيات (اضغط للفتح)</th><th>الصورة</th><th>صورة المعالجة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
+      const head = `<thead><tr><th>النقطة / الإحداثيات (اضغط للفتح)</th><th>الصورة</th><th>الإحداثية المحددة</th><th>المسافة بينهما</th><th>الدقة (م)</th><th>الوقت</th></tr></thead>`;
 
       statusEl.textContent = 'جاري تحميل صورة الخريطة...';
       const mapImg = await mapImage();
       statusEl.textContent = 'جاري إنشاء ملف PDF...';
-      const firstRows = 4, nextRows = 13;   // صفوف أطول لأن فيها صورة الموقع وصورة المعالجة
+      const firstRows = 5, nextRows = 13;   // الإرفاق أُلغي من PDF بطلب المستخدم   // صفوف أطول لأن فيها صورة الموقع وصورة المعالجة
       pages.push(`
         <h2>جدول إحداثيات النقاط${district ? ' — ' + district : ''}</h2>
         <div class="meta">${district ? 'الحي: <b>' + district + '</b> — ' : ''}عدد النقاط: ${points.length}<br>تاريخ التقرير: ${new Date().toLocaleString('ar-SA')}</div>
-        <div class="pdf-note">📎 لإرفاق الصورة، افتح الملف باستخدام تطبيق Adobe Acrobat Reader، ثم اضغط «＋» في خانة «صورة المعالجة» واختر الصورة، ثم احفظ الملف وأرسله.<br>
-          <small>ملاحظة: إدراج الصور في خانات PDF مدعوم في Adobe Acrobat Reader على الكمبيوتر وفي تطبيق PDF Expert على iPhone، وغير مدعوم في عارضات الجوال العادية.</small></div>
         <div class="shape">${mapImg ? `<img src="${mapImg}" style="width:100%;border-radius:6px;border:1px solid #ccd">` : ''}</div>
         <table>${head}<tbody>${points.slice(0, firstRows).map(row).join('')}</tbody></table>`);
       for (let i = firstRows; i < points.length; i += nextRows)
