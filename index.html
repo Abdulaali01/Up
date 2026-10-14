@@ -4398,69 +4398,6 @@
       const icon = L.divIcon({ className: '', html: `<div class="xls-icon">${esc(p.name)}</div>`, iconSize: null, iconAnchor: [15, 15] });
       const g = `https://www.google.com/maps/search/?api=1&query=${p.lat.toFixed(6)},${p.lng.toFixed(6)}`;
       const extra = (p.extra || []).map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td>${esc(v)}</td></tr>`).join('');
-      L.marker([p.lat, p.lng], { icon, zIndexOffset: 500 }).addTo(xlsLayer).bindPopup(
-        `<div class="xls-pop"><b>📊 ${esc(p.name)}</b> <small>(${esc(p.sheet)} — صف ${p.row})</small><br>
-         <span dir="ltr">${p.lat.toFixed(6)}, ${p.lng.toFixed(6)}</span><br>
-         <a href="${g}" target="_blank" rel="noopener">🗺️ فتح في خرائط Google</a>
-         ${extra ? `<table>${extra}</table>` : ''}</div>`, { maxWidth: 260 });
-    });
-    clr.hidden = !xlsPts.length;
-    if (fit && xlsPts.length) {
-      if (xlsPts.length === 1) map.setView([xlsPts[0].lat, xlsPts[0].lng], 18);
-      else map.fitBounds(L.latLngBounds(xlsPts.map(p => [p.lat, p.lng])).pad(0.15), { maxZoom: 18 });
-      document.getElementById('map').scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }
 
-  btn.onclick = () => input.click();
-  input.onchange = async e => {
-    const f = e.target.files[0]; e.target.value = '';
-    if (!f) return;
-    statusEl.textContent = 'جاري قراءة ملف Excel...';
-    try {
-      await loadXLSX();
-      const wb = /\.csv$/i.test(f.name) ? XLSX.read(await f.text(), { type: 'string' }) : XLSX.read(await f.arrayBuffer(), { type: 'array' });
-      const found = []; let bad = 0;
-      wb.SheetNames.forEach(sn => {
-        const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: '' });
-        const d = detect(rows);
-        if (!d) return;
-        for (let r = d.start; r < rows.length; r++) {
-          const row = rows[r];
-          if (!row || row.every(c => String(c).trim() === '')) continue;
-          let lat, lng;
-          if (d.co !== undefined) { const c = pairFromCell(row[d.co]); if (c) { lat = c.lat; lng = c.lng; } }
-          else { lat = toCoord(row[d.la]); lng = toCoord(row[d.lo]); }
-          if (isFinite(lat) && isFinite(lng) && Math.abs(lat) > 90 && Math.abs(lng) <= 90) [lat, lng] = [lng, lat];
-          if (!ok(lat, lng)) { bad++; continue; }
-          const nmv = d.nm >= 0 ? String(row[d.nm] ?? '').trim() : '';
-          const used = [d.la, d.lo, d.co, d.nm];
-          const extra = d.head ? d.head.map((h, i) => [h, row[i]]).filter(([h, v], i) => h && !used.includes(i) && String(v).trim() !== '') : [];
-          found.push({ name: nmv || 'X' + (found.length + 1), lat, lng, sheet: sn, row: r + 1, extra });
-        }
-      });
-      if (!found.length) {
-        statusEl.textContent = '⚠️ لم أجد إحداثيات في الملف. اجعل فيه عموداً لخط العرض (Latitude) وعموداً لخط الطول (Longitude)، أو عموداً فيه الإحداثيتان معاً مثل: 21.2457, 40.3667';
-        return;
-      }
-      xlsPts = found;
-      await DB.save(xlsPts, 'excel');
-      drawXls(true);
-      statusEl.textContent = `📊 تم تحديد ${found.length} نقطة من ملف «${f.name}» على الخريطة ✔` +
-        (bad ? ` — ${bad} صف بإحداثيات غير صالحة تم تجاهله (تأكد أنها درجات وليست UTM)` : '');
-    } catch (err) {
-      statusEl.textContent = 'تعذّر قراءة ملف Excel: ' + err.message + ' — تأكد من الاتصال بالإنترنت.';
-    }
-  };
-  clr.onclick = async () => {
-    if (!confirm('مسح نقاط ملف Excel من الخريطة؟ (صورك ونقاطك الأخرى لا تتأثر)')) return;
-    xlsPts = []; await DB.save([], 'excel'); drawXls(false);
-    statusEl.textContent = 'تم مسح نقاط Excel.';
-  };
-
-  DB.load('excel', []).then(d => { if (Array.isArray(d) && d.length) { xlsPts = d; drawXls(false); } });
-})();
-</script>
-<!-- ===================== نهاية إضافة Excel ===================== -->
 </body>
 </html>
